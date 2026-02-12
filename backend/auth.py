@@ -1,0 +1,228 @@
+
+import os
+import requests
+from urllib.parse import urlencode
+import logging
+
+logger = logging.getLogger("social_insights.auth")
+
+class InstagramAuth:
+    def __init__(self):
+        self.app_id = os.getenv("Instagram_app_id")
+        self.app_secret = os.getenv("Instagram_app_secret")
+        self.redirect_uri = os.getenv("INSTAGRAM_REDIRECT_URI", "http://localhost:8000/auth/instagram/callback")
+        self.base_url = "https://www.facebook.com/v19.0/dialog/oauth"
+        self.token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+
+    def get_auth_url(self):
+        """Build the Meta OAuth URL"""
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "scope": "pages_show_list,instagram_basic,instagram_manage_insights,pages_read_engagement,public_profile",
+            "response_type": "code"
+        }
+        return f"{self.base_url}?{urlencode(params)}"
+
+    def exchange_code_for_token(self, code: str):
+        """Exchange the auth code for a short-lived access token, then upgrade to long-lived"""
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "client_secret": self.app_secret,
+            "code": code
+        }
+        
+        # 1. Short-lived token
+        try:
+            res = requests.get(self.token_url, params=params, timeout=10)
+            data = res.json()
+        except Exception as e:
+            logger.error(f"Network error getting short-lived token: {e}")
+            return None
+        
+        if "error" in data:
+            logger.error(f"Error exchanging code: {data['error'].get('message')}")
+            return None
+
+        short_token = data.get("access_token")
+        
+        # 2. Upgrade to Long-lived token (60 days)
+        upgrade_params = {
+            "grant_type": "fb_exchange_token",
+            "client_id": self.app_id,
+            "client_secret": self.app_secret,
+            "fb_exchange_token": short_token
+        }
+        
+        try:
+            upgrade_res = requests.get(self.token_url, params=upgrade_params, timeout=10)
+            long_data = upgrade_res.json()
+        except Exception as e:
+            logger.error(f"Network error upgrading token: {e}")
+            return data # Return short token as fallback
+
+        if "error" in long_data:
+            logger.error(f"Error upgrading token: {long_data['error'].get('message')}")
+            return data # Return short token as fallback
+            
+        return long_data
+
+class PinterestAuth:
+    def __init__(self):
+        self.client_id = os.getenv("Pinterest_app_id")
+        self.client_secret = os.getenv("Pinterest_app_secret")
+        # Match accurately to the Pinterest Dashboard setting: http://localhost:8000/auth/callback
+        self.redirect_uri = os.getenv("PINTEREST_REDIRECT_URI", "http://localhost:8000/auth/callback")
+        self.auth_url = "https://www.pinterest.com/oauth/"
+        self.token_url = "https://api.pinterest.com/v5/oauth/token"
+
+    def get_auth_url(self):
+        """Build the Pinterest OAuth URL"""
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "response_type": "code",
+            "scope": "user_accounts:read,pins:read,boards:read"
+        }
+        return f"{self.auth_url}?{urlencode(params)}"
+
+    def exchange_code_for_token(self, code: str):
+        """Exchange the auth code for an access token"""
+        import base64
+        
+        # Pinterest requires Basic Auth for the token exchange
+        auth_string = f"{self.client_id}:{self.client_secret}"
+        encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        
+        headers = {
+            "Authorization": f"Basic {encoded_auth}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.redirect_uri
+        }
+        
+        res = requests.post(self.token_url, headers=headers, data=data)
+        token_data = res.json()
+        
+        if "error" in token_data:
+            logger.error(f"Pinterest Token Error: {token_data.get('error_description', token_data.get('error'))}")
+            return None
+            
+        return token_data
+
+class MetaAuth:
+    def __init__(self):
+        self.app_id = os.getenv("Instagram_app_id") # Use same Meta App credentials
+        self.app_secret = os.getenv("Instagram_app_secret")
+        self.redirect_uri = os.getenv("META_REDIRECT_URI", "http://localhost:8000/auth/meta/callback")
+        self.base_url = "https://www.facebook.com/v19.0/dialog/oauth"
+        self.token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+
+    def get_auth_url(self):
+        """Build the Meta OAuth URL for Facebook Pages"""
+        # Reduced scope to core essentials to minimize friction
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "scope": "pages_show_list,pages_read_engagement,public_profile,read_insights",
+            "response_type": "code"
+        }
+        url = f"{self.base_url}?{urlencode(params)}"
+        logger.info(f"Generated Meta Auth URL: {url}")
+        return url
+
+    def exchange_code_for_token(self, code: str):
+        """Exchange the auth code for a short-lived access token, then upgrade to long-lived"""
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "client_secret": self.app_secret,
+            "code": code
+        }
+        
+        logger.info(f"Exchanging code for Meta token. Client ID: {self.app_id}")
+        
+        # 1. Short-lived token
+        try:
+            res = requests.get(self.token_url, params=params, timeout=10)
+            data = res.json()
+        except Exception as e:
+            logger.error(f"Network error exchanging Meta code: {e}")
+            return None
+        
+        if "error" in data:
+            logger.error(f"Meta error exchanging code: {data['error'].get('message')}")
+            return None
+
+        short_token = data.get("access_token")
+        logger.info("Successfully received Meta short-lived token")
+        
+        # 2. Upgrade to Long-lived token (60 days)
+        upgrade_params = {
+            "grant_type": "fb_exchange_token",
+            "client_id": self.app_id,
+            "client_secret": self.app_secret,
+            "fb_exchange_token": short_token
+        }
+        
+        try:
+            upgrade_res = requests.get(self.token_url, params=upgrade_params, timeout=10)
+            long_data = upgrade_res.json()
+        except Exception as e:
+            logger.error(f"Network error upgrading Meta token: {e}")
+            return data
+            
+        if "error" in long_data:
+            logger.error(f"Meta error upgrading token: {long_data['error'].get('message')}")
+            return data
+            
+        logger.info("Successfully upgraded to Meta long-lived token")
+        return long_data
+
+class YouTubeAuth:
+    def __init__(self):
+        self.client_id = os.getenv("youtube_client_id")
+        self.client_secret = os.getenv("youtube_client_secret")
+        self.redirect_uri = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback")
+        self.auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        self.token_url = "https://oauth2.googleapis.com/token"
+
+    def get_auth_url(self):
+        """Build the Google OAuth URL for YouTube"""
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "response_type": "code",
+            "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly openid email profile",
+            "access_type": "offline",
+            "prompt": "consent"
+        }
+        return f"{self.auth_url}?{urlencode(params)}"
+
+    def exchange_code_for_token(self, code: str):
+        """Exchange the auth code for an access token and refresh token"""
+        data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": self.redirect_uri
+        }
+        
+        try:
+            res = requests.post(self.token_url, data=data, timeout=10)
+            token_data = res.json()
+        except Exception as e:
+            logger.error(f"Network error exchanging YouTube code: {e}")
+            return None
+            
+        if "error" in token_data:
+            logger.error(f"YouTube OAuth error: {token_data.get('error_description', token_data.get('error'))}")
+            return None
+            
+        return token_data
