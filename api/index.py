@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, root_path="/api")
 
 # CORS configuration
 app.add_middleware(
