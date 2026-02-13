@@ -19,7 +19,7 @@ def list_data():
         print(f"Platform: {item.get('platform')}, ID: {item.get('account_id')}, Name: {item.get('account_name')}")
 
     print("\n--- Metrics ---")
-    table_met = dynamodb.Table('instagram_metrics')
+    table_met = dynamodb.Table('social_metrics')
     items_met = table_met.scan()['Items']
     for item in items_met:
         print(f"Account: {item.get('account_id')}, TS: {item.get('timestamp')}, Followers: {item.get('followers_total')}")
