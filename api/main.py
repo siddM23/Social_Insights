@@ -32,16 +32,17 @@ status_db = DynamoDB('app_status')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup
-    logger.info("Initializing DynamoDB tables...")
-    integrations_db.create_table(pk='platform', sk='account_id', sk_type='S')
-    metrics_db.create_table(pk='account_id', sk='timestamp', sk_type='S')
-    status_db.create_table(pk='id') # Simple PK for status singleton
-    logger.info("Tables initialized.")
+    # Skip table creation in production/Vercel to avoid timeouts
+    # Only use for local development if needed
+    logger.info("Social Insights Backend Starting...")
     yield
     logger.info("Shutting down...")
 
 app = FastAPI(lifespan=lifespan)
+
+@app.get("/health")
+def health_check():
+    return {"status": "alive", "timestamp": datetime.datetime.utcnow().isoformat()}
 
 # CORS configuration
 app.add_middleware(

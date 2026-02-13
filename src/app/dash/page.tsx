@@ -222,9 +222,8 @@ export default function DashPage() {
                 alert(data.detail || "Failed to trigger sync.");
             }
         } catch (err) {
-            console.error("Error during sync:", err);
-            alert("Sync started on server. Data will refresh in a moment.");
-            // Still reload data just in case it's actually working
+            console.error("Sync Trigger Error:", err);
+            alert("Unable to reach sync service. This might be a timeout or a temporary server issue. Refreshing data now anyway...");
             setTimeout(() => loadDashboardData(), 2000);
         } finally {
             setIsSyncing(false);
