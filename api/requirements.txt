@@ -4,5 +4,6 @@ boto3
 pydantic
 requests
 python-dotenv
-jwt
+PyJWT
 passlib
+bcrypt
