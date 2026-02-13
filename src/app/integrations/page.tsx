@@ -128,7 +128,10 @@ const PlatformCard: React.FC<PlatformCardProps> = ({
     );
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ||
+    (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? "http://127.0.0.1:8000"
+        : "/api");
 
 export default function IntegrationsPage() {
     const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);

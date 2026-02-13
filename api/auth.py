@@ -73,7 +73,7 @@ class PinterestAuth:
         self.client_id = os.getenv("Pinterest_app_id")
         self.client_secret = os.getenv("Pinterest_app_secret")
         # Match accurately to the Pinterest Dashboard setting: http://localhost:8000/auth/callback
-        self.redirect_uri = os.getenv("PINTEREST_REDIRECT_URI", "http://localhost:8000/auth/callback")
+        self.redirect_uri = os.getenv("PINTEREST_REDIRECT_URI", "http://localhost:8000/auth/pinterest/callback")
         self.auth_url = "https://www.pinterest.com/oauth/"
         self.token_url = "https://api.pinterest.com/v5/oauth/token"
 

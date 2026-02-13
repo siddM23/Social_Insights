@@ -101,7 +101,10 @@ const SocialMetricRow: React.FC<SocialMetricData> = (props) => {
 };
 
 // Use environment variable for API URL or default to localhost
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 
+                (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+                    ? "http://127.0.0.1:8000" 
+                    : "/api");
 
 export default function DashPage() {
     const [metrics, setMetrics] = useState<any[]>([]);

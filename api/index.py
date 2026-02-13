@@ -9,4 +9,4 @@ from main import app
 
 # Vercel-specific: Handle the /api prefix if necessary
 # If Vercel doesn't strip the prefix, we might need to adjust root_path
-# app.root_path = "/api"
+app.root_path = "/api"
