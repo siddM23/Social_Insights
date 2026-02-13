@@ -357,7 +357,7 @@ def get_sync_status():
     }
 
 @app.post("/sync")
-async def trigger_sync():
+async def trigger_sync(background_tasks: BackgroundTasks):
     max_limit = int(os.getenv("SYNC_MAX_LIMIT", 3))
     now = datetime.datetime.utcnow()
     
@@ -387,19 +387,19 @@ async def trigger_sync():
             sync_count = 0
             status['sync_limit_stat'] = False
 
-    # 3. Perform sync INLINE (Vercel compatible)
-    run_full_sync()
-    
-    # 4. Update status immediately
+    # 3. Update status IMMEDIATELY (Prevent Vercel timeout)
     sync_count += 1
     status['sync_count'] = sync_count
     status['last_sync_time'] = now.isoformat()
     if sync_count >= max_limit:
-        status['status_sync_limit_stat'] = True
+        status['sync_limit_stat'] = True
     status_db.save_item(status)
+
+    # 4. Perform sync in BACKGROUND
+    background_tasks.add_task(run_full_sync)
     
     return {
-        "message": "Sync complete",
+        "message": "Sync started in background",
         "sync_count": sync_count,
         "limit_reached": status.get('sync_limit_stat', False)
     }

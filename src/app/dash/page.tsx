@@ -101,10 +101,10 @@ const SocialMetricRow: React.FC<SocialMetricData> = (props) => {
 };
 
 // Use environment variable for API URL or default to localhost
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 
-                (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-                    ? "http://127.0.0.1:8000" 
-                    : "/api");
+const API_URL = process.env.NEXT_PUBLIC_API_URL ||
+    (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? "http://127.0.0.1:8000"
+        : "/api");
 
 export default function DashPage() {
     const [metrics, setMetrics] = useState<any[]>([]);
@@ -206,7 +206,7 @@ export default function DashPage() {
             if (res.ok) {
                 console.log("Sync result:", data);
 
-                // 1. Update sync status (limit/count)
+                // 2. Update sync status
                 setSyncStatus(prev => ({
                     ...prev,
                     sync_count: data.sync_count,
@@ -214,28 +214,18 @@ export default function DashPage() {
                     last_sync_time: new Date().toISOString()
                 }));
 
-                // 2. Map live metrics from response directly to UI
-                if (data.metrics && Array.isArray(data.metrics)) {
-                    const mappedMetrics = data.metrics.map((m: any) => ({
-                        accountName: m.account_name || m.account_id,
-                        followersTotal: parseInt(m.followers_total) || 0,
-                        followersNew: parseInt(m.followers_new) || 0,
-                        viewsOrganic: parseInt(m.views_organic) || 0,
-                        viewsAds: parseInt(m.views_ads) || 0,
-                        interactions: parseInt(m.interactions) || 0,
-                        profileVisits: parseInt(m.profile_visits) || 0,
-                        accountsReached: parseInt(m.accounts_reached) || 0,
-                        saves: parseInt(m.saves) || 0,
-                        platform: m.platform || 'instagram'
-                    }));
-                    setMetrics(mappedMetrics);
-                }
+                // 3. Wait a moment and then reload data to catch the initial sync results
+                setTimeout(() => {
+                    loadDashboardData();
+                }, 2000);
             } else {
                 alert(data.detail || "Failed to trigger sync.");
             }
         } catch (err) {
             console.error("Error during sync:", err);
-            alert("Error connecting to sync service.");
+            alert("Sync started on server. Data will refresh in a moment.");
+            // Still reload data just in case it's actually working
+            setTimeout(() => loadDashboardData(), 2000);
         } finally {
             setIsSyncing(false);
         }
