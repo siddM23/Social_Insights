@@ -12,6 +12,18 @@ import logging
 from auth import InstagramAuth, PinterestAuth, MetaAuth, YouTubeAuth
 from fastapi.responses import RedirectResponse
 import jwt
+import bcrypt
+
+# Monkeypatch bcrypt for passlib compatibility (bcrypt 4.0+ removed __about__)
+# This fixes AttributeError: module 'bcrypt' has no attribute '__about__'
+if not hasattr(bcrypt, "__about__"):
+    try:
+        from bcrypt import __version__ as bcrypt_version
+        class About:
+            __version__ = bcrypt_version
+        bcrypt.__about__ = About()
+    except ImportError:
+        pass
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends
