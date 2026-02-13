@@ -6,8 +6,8 @@ import Sidebar from "@/components/Sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Unified Ads Portfolio Dashboard",
-  description: "Aggregate performance metrics across ad platforms",
+  title: "Unified Social Media Reporting",
+  description: "Aggregate performance across social media platforms",
   icons: {
     icon: [
       { url: "/cube_logo.png?v=1" },
