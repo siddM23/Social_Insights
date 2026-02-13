@@ -11,6 +11,10 @@ from pydantic import BaseModel
 import logging
 from auth import InstagramAuth, PinterestAuth, MetaAuth, YouTubeAuth
 from fastapi.responses import RedirectResponse
+import jwt
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
 
 # Setup Logging
 logging.basicConfig(
@@ -29,6 +33,56 @@ load_dotenv()
 integrations_db = DynamoDB('socials_integrations')
 metrics_db = DynamoDB('instagram_metrics')
 status_db = DynamoDB('app_status')
+users_db = DynamoDB('social_users')
+activity_db = DynamoDB('user_activity')
+
+# --- Auth Utilities ---
+JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key")
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+
+async def get_current_user(token: Optional[str] = None, oauth_token: str = Depends(oauth2_scheme)):
+    # Fallback to query param if header is missing (useful for GET redirects)
+    actual_token = oauth_token if oauth_token else token
+    
+    if not actual_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    try:
+        payload = jwt.decode(actual_token, JWT_SECRET, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_id
+    except Exception:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+# --- Activity Logger ---
+def log_user_activity(user_id: str, activity_type: str, details: Dict[str, Any] = None):
+    try:
+        timestamp = datetime.datetime.utcnow().isoformat()
+        activity_db.save_item({
+            "user_id": user_id,
+            "timestamp": timestamp,
+            "activity_type": activity_type,
+            "details": details or {}
+        })
+        logger.info(f"Logged activity: {activity_type} for user {user_id}")
+    except Exception as e:
+        logger.error(f"Failed to log activity: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,6 +125,14 @@ class MetricRequest(BaseModel):
     profile_visits: int
     accounts_reached: int
 
+class UserAuthRequest(BaseModel):
+    user_id: str
+    password: str
+
+class ActivityLogRequest(BaseModel):
+    activity_type: str
+    details: Optional[Dict[str, Any]] = None
+
 @app.get("/")
 def read_root():
     return {"status": "ok", "service": "Social Insights Backend"}
@@ -78,21 +140,21 @@ def read_root():
 # --- Auth Endpoints ---
 
 @app.get("/auth/instagram/login")
-async def auth_instagram_login():
-    start_time = datetime.datetime.now()
-    logger.info("Instagram login URL requested")
+async def auth_instagram_login(user_id: str = Depends(get_current_user)):
+    logger.info(f"Instagram login URL requested by user: {user_id}")
     auth_client = InstagramAuth()
-    url = auth_client.get_auth_url()
+    url = auth_client.get_auth_url(state=user_id)
     return RedirectResponse(url=url)
 
 @app.get("/auth/instagram/callback")
-async def auth_instagram_callback(code: str):
+async def auth_instagram_callback(code: str, state: Optional[str] = None):
     auth_client = InstagramAuth()
     token_data = auth_client.exchange_code_for_token(code)
     if not token_data:
         raise HTTPException(status_code=400, detail="Failed to exchange Instagram code for token")
     
     access_token = token_data.get("access_token")
+    user_id = state or "anonymous"
     
     # FETCH ACCOUNT DETAILS AUTOMATICALLY
     from Sources.instagram import InstagramClient
@@ -112,29 +174,32 @@ async def auth_instagram_callback(code: str):
             "account_id": normalized_id,
             "account_name": acc.get("username", acc["account_id"]),
             "access_token": access_token,
+            "owner_id": user_id,
             "additional_info": {"status": "Active", "page_name": acc.get("page_name")}
         })
         # Inline sync (Vercel compatible)
         sync_account(normalized_id, access_token)
+        # Log Activity
+        log_user_activity(user_id, "add_integration", {"platform": "instagram", "account_id": normalized_id})
     
     return RedirectResponse(url=f"{frontend_url}/integrations?status=success&platform=instagram&count={len(accounts)}")
 
 @app.get("/auth/pinterest/login")
-async def auth_pinterest_login():
-    start_time = datetime.datetime.now()
-    logger.info("Pinterest login URL requested")
+async def auth_pinterest_login(user_id: str = Depends(get_current_user)):
+    logger.info(f"Pinterest login URL requested by user: {user_id}")
     auth_client = PinterestAuth()
-    url = auth_client.get_auth_url()
+    url = auth_client.get_auth_url(state=user_id)
     return RedirectResponse(url=url)
 
 @app.get("/auth/pinterest/callback") # Matches user's recent change
-async def auth_pinterest_callback(code: str):
+async def auth_pinterest_callback(code: str, state: Optional[str] = None):
     auth_client = PinterestAuth()
     token_data = auth_client.exchange_code_for_token(code)
     if not token_data:
         raise HTTPException(status_code=400, detail="Failed to exchange Pinterest code for token")
     
     access_token = token_data.get("access_token")
+    user_id = state or "anonymous"
     
     from Sources.pinterest import PinterestClient
     client = PinterestClient(access_token)
@@ -151,24 +216,27 @@ async def auth_pinterest_callback(code: str):
         "account_id": normalized_id,
         "account_name": profile.get("username", normalized_id),
         "access_token": access_token,
+        "owner_id": user_id,
         "additional_info": {"status": "Active"}
     })
     
     # Inline sync (Vercel compatible)
     sync_pinterest_account(normalized_id, access_token)
+    
+    # Log Activity
+    log_user_activity(user_id, "add_integration", {"platform": "pinterest", "account_id": normalized_id})
 
     return RedirectResponse(url=f"{frontend_url}/integrations?status=success&platform=pinterest")
 
 @app.get("/auth/meta/login")
-async def auth_meta_login():
-    start_time = datetime.datetime.now()
-    logger.info("Meta login URL requested")
+async def auth_meta_login(user_id: str = Depends(get_current_user)):
+    logger.info(f"Meta login URL requested by user: {user_id}")
     auth_client = MetaAuth()
-    url = auth_client.get_auth_url()
+    url = auth_client.get_auth_url(state=user_id)
     return RedirectResponse(url=url)
 
 @app.get("/auth/meta/callback")
-async def auth_meta_callback(code: str):
+async def auth_meta_callback(code: str, state: Optional[str] = None):
     logger.info("Meta callback received. Exchanging code for token...")
     auth_client = MetaAuth()
     token_data = auth_client.exchange_code_for_token(code)
@@ -177,7 +245,7 @@ async def auth_meta_callback(code: str):
         raise HTTPException(status_code=400, detail="Failed to exchange Meta code for token")
     
     access_token = token_data.get("access_token")
-    logger.info("Token exchange successful. Fetching Meta pages...")
+    user_id = state or "anonymous"
     
     # FETCH ACCOUNT DETAILS AUTOMATICALLY
     from Sources.meta import MetaClient
@@ -190,7 +258,6 @@ async def auth_meta_callback(code: str):
         logger.warning("No Facebook Pages found for this account")
         return RedirectResponse(url=f"{frontend_url}/integrations?status=error&message=no_facebook_pages")
 
-    logger.info(f"Found {len(pages)} Meta pages. Saving...")
     # Save all discovered pages
     for page in pages:
         normalized_id = page["account_id"].lower()
@@ -202,22 +269,25 @@ async def auth_meta_callback(code: str):
             "account_id": normalized_id,
             "account_name": page["name"],
             "access_token": token_to_save,
+            "owner_id": user_id,
             "additional_info": {"status": "Active", "category": page.get("category")}
         })
         # Inline sync (Vercel compatible)
         sync_meta_account(normalized_id, token_to_save)
+        # Log Activity
+        log_user_activity(user_id, "add_integration", {"platform": "facebook", "account_id": normalized_id})
     
     return RedirectResponse(url=f"{frontend_url}/integrations?status=success&platform=meta&count={len(pages)}")
 
 @app.get("/auth/youtube/login")
-async def auth_youtube_login():
-    logger.info("YouTube login URL requested")
+async def auth_youtube_login(user_id: str = Depends(get_current_user)):
+    logger.info(f"YouTube login URL requested by user: {user_id}")
     auth_client = YouTubeAuth()
-    url = auth_client.get_auth_url()
+    url = auth_client.get_auth_url(state=user_id)
     return RedirectResponse(url=url)
 
 @app.get("/auth/youtube/callback")
-async def auth_youtube_callback(code: str):
+async def auth_youtube_callback(code: str, state: Optional[str] = None):
     logger.info("YouTube callback received. Exchanging code for token...")
     auth_client = YouTubeAuth()
     token_data = auth_client.exchange_code_for_token(code)
@@ -227,6 +297,7 @@ async def auth_youtube_callback(code: str):
     
     access_token = token_data.get("access_token")
     refresh_token = token_data.get("refresh_token") # Google usually gives refresh token in first auth
+    user_id = state or "anonymous"
     
     logger.info("Token exchange successful. Fetching YouTube channels...")
     
@@ -250,6 +321,7 @@ async def auth_youtube_callback(code: str):
             "account_id": normalized_id,
             "account_name": channel["name"],
             "access_token": access_token,
+            "owner_id": user_id,
             "additional_info": {
                 "status": "Active", 
                 "refresh_token": refresh_token,
@@ -258,49 +330,104 @@ async def auth_youtube_callback(code: str):
         })
         # Inline sync (Vercel compatible)
         sync_youtube_account(normalized_id, access_token)
+        # Log Activity
+        log_user_activity(user_id, "add_integration", {"platform": "youtube", "account_id": normalized_id})
     
     return RedirectResponse(url=f"{frontend_url}/integrations?status=success&platform=youtube&count={len(channels)}")
+
+# --- User Auth Endpoints ---
+
+@app.post("/register")
+async def register(req: UserAuthRequest):
+    # Check if user exists
+    existing = users_db.get_item({"user_id": req.user_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    hashed_password = get_password_hash(req.password)
+    users_db.save_item({
+        "user_id": req.user_id,
+        "password": hashed_password,
+        "created_at": datetime.datetime.utcnow().isoformat()
+    })
+    return {"message": "User created successfully"}
+
+@app.post("/login")
+async def login(req: UserAuthRequest):
+    user = users_db.get_item({"user_id": req.user_id})
+    if not user or not verify_password(req.password, user["password"]):
+        raise HTTPException(status_code=401, detail="Incorrect user ID or password")
+    
+    access_token = create_access_token(data={"sub": req.user_id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/activity")
+async def log_activity(req: ActivityLogRequest, user_id: str = Depends(get_current_user)):
+    log_user_activity(user_id, req.activity_type, req.details)
+    return {"status": "logged"}
+
+@app.get("/auth/me")
+async def check_auth(user_id: str = Depends(get_current_user)):
+    return {"user_id": user_id}
 
 # --- Integrations Endpoints ---
 
 @app.post("/integrations")
-async def add_integration(req: IntegrationRequest):
+async def add_integration(req: IntegrationRequest, user_id: str = Depends(get_current_user)):
     if not req.access_token or not req.access_token.strip():
         raise HTTPException(status_code=400, detail="Access token is required and cannot be empty")
         
     item = req.dict()
+    item["owner_id"] = user_id # Track ownership
     success = integrations_db.save_item(item)
     
     if req.platform == "instagram":
         # Inline sync (Vercel compatible)
         sync_account(req.account_id, req.access_token)
+    
+    # LOG ACTIVITY
+    log_user_activity(user_id, "add_integration", {"platform": req.platform, "account_id": req.account_id})
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to save integration")
     return {"message": "Integration saved", "data": item}
 
 @app.get("/integrations/{platform}/{account_id}")
-def get_integration(platform: str, account_id: str):
+def get_integration(platform: str, account_id: str, user_id: str = Depends(get_current_user)):
     item = integrations_db.get_item({'platform': platform, 'account_id': account_id})
     if not item:
         raise HTTPException(status_code=404, detail="Integration not found")
-    return item
+    
+    # Security: Remove sensitive token before sending to frontend
+    clean_item = {k: v for k, v in item.items() if k != "access_token"}
+    return clean_item
 
 @app.get("/integrations")
-def list_integrations():
+def list_integrations(user_id: str = Depends(get_current_user)):
     items = integrations_db.scan_items()
     normalized = []
     for item in items:
-        if 'account_name' not in item:
-             item['account_name'] = item.get('account_id', 'Unknown')
-        normalized.append(item)
+        # Security: Remove sensitive token before sending to frontend
+        clean_item = {k: v for k, v in item.items() if k != "access_token"}
+        if 'account_name' not in clean_item:
+             clean_item['account_name'] = clean_item.get('account_id', 'Unknown')
+        normalized.append(clean_item)
     return normalized
 
 @app.delete("/integrations/{platform}/{account_id}")
-def delete_integration(platform: str, account_id: str):
+def delete_integration(platform: str, account_id: str, user_id: str = Depends(get_current_user)):
+    # Verify existence before deleting
+    existing = integrations_db.get_item({'platform': platform, 'account_id': account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
     success = integrations_db.delete_item({'platform': platform, 'account_id': account_id})
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete integration")
+    
+    # LOG ACTIVITY
+    log_user_activity(user_id, "delete_integration", {"platform": platform, "account_id": account_id})
+    
     logger.info(f"Deleted {platform} integration: {account_id}")
     return {"message": "Integration deleted"}
 
@@ -358,9 +485,12 @@ def get_sync_status():
     }
 
 @app.post("/sync")
-async def trigger_sync(background_tasks: BackgroundTasks):
+async def trigger_sync(background_tasks: BackgroundTasks, user_id: str = Depends(get_current_user)):
     max_limit = int(os.getenv("SYNC_MAX_LIMIT", 3))
     now = datetime.datetime.utcnow()
+    
+    # Log the activity
+    log_user_activity(user_id, "trigger_sync")
     
     # 1. Check sync status
     status = status_db.get_item({'id': 'global_sync'})

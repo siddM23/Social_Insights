@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   },
 };
 
+import { AuthProvider } from "@/context/AuthContext";
+import LayoutWrapper from "@/components/LayoutWrapper";
+
 export default function RootLayout({
   children,
 }: {
@@ -29,11 +32,12 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/cube_logo.png?v=1" />
       </head>
-      <body className={`${inter.className} flex h-screen overflow-hidden bg-slate-50`}>
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+      <body className={`${inter.className} bg-slate-50`}>
+        <AuthProvider>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+        </AuthProvider>
       </body>
     </html>
   );

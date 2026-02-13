@@ -14,7 +14,7 @@ class InstagramAuth:
         self.base_url = "https://www.facebook.com/v19.0/dialog/oauth"
         self.token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
 
-    def get_auth_url(self):
+    def get_auth_url(self, state: str = None):
         """Build the Meta OAuth URL"""
         params = {
             "client_id": self.app_id,
@@ -22,6 +22,8 @@ class InstagramAuth:
             "scope": "pages_show_list,instagram_basic,instagram_manage_insights,pages_read_engagement,public_profile",
             "response_type": "code"
         }
+        if state:
+            params["state"] = state
         return f"{self.base_url}?{urlencode(params)}"
 
     def exchange_code_for_token(self, code: str):
@@ -77,7 +79,7 @@ class PinterestAuth:
         self.auth_url = "https://www.pinterest.com/oauth/"
         self.token_url = "https://api.pinterest.com/v5/oauth/token"
 
-    def get_auth_url(self):
+    def get_auth_url(self, state: str = None):
         """Build the Pinterest OAuth URL"""
         params = {
             "client_id": self.client_id,
@@ -85,6 +87,8 @@ class PinterestAuth:
             "response_type": "code",
             "scope": "user_accounts:read,pins:read,boards:read"
         }
+        if state:
+            params["state"] = state
         return f"{self.auth_url}?{urlencode(params)}"
 
     def exchange_code_for_token(self, code: str):
@@ -123,7 +127,7 @@ class MetaAuth:
         self.base_url = "https://www.facebook.com/v19.0/dialog/oauth"
         self.token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
 
-    def get_auth_url(self):
+    def get_auth_url(self, state: str = None):
         """Build the Meta OAuth URL for Facebook Pages"""
         # Reduced scope to core essentials to minimize friction
         params = {
@@ -132,6 +136,8 @@ class MetaAuth:
             "scope": "pages_show_list,pages_read_engagement,public_profile,read_insights",
             "response_type": "code"
         }
+        if state:
+            params["state"] = state
         url = f"{self.base_url}?{urlencode(params)}"
         logger.info(f"Generated Meta Auth URL: {url}")
         return url
@@ -192,7 +198,7 @@ class YouTubeAuth:
         self.auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         self.token_url = "https://oauth2.googleapis.com/token"
 
-    def get_auth_url(self):
+    def get_auth_url(self, state: str = None):
         """Build the Google OAuth URL for YouTube"""
         params = {
             "client_id": self.client_id,
@@ -202,6 +208,8 @@ class YouTubeAuth:
             "access_type": "offline",
             "prompt": "consent"
         }
+        if state:
+            params["state"] = state
         return f"{self.auth_url}?{urlencode(params)}"
 
     def exchange_code_for_token(self, code: str):

@@ -3,11 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, Zap } from "lucide-react";
+import { LayoutDashboard, Settings, Zap, LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 const Sidebar = () => {
     const pathname = usePathname();
+    const { logout } = useAuth();
 
     const navItems = [
         { name: "Dashboard", icon: LayoutDashboard, href: "/dash" },
@@ -47,7 +49,7 @@ const Sidebar = () => {
                 ))}
             </nav>
 
-            <div className="px-2 py-6 border-t border-slate-100 flex flex-col items-center">
+            <div className="px-2 py-6 border-t border-slate-100 flex flex-col items-center gap-4">
                 {bottomItems.map((item) => (
                     <Link
                         key={item.href}
@@ -63,6 +65,14 @@ const Sidebar = () => {
                         <item.icon size={24} />
                     </Link>
                 ))}
+
+                <button
+                    onClick={logout}
+                    className="p-3 rounded-xl transition-all duration-200 text-slate-300 hover:text-red-500 hover:bg-red-50 w-full flex justify-center items-center"
+                    title="Log Out"
+                >
+                    <LogOut size={24} />
+                </button>
             </div>
         </div>
     );

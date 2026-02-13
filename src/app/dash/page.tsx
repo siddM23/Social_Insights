@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { RefreshCcw, AlertCircle } from "lucide-react";
+import { RefreshCcw, AlertCircle, LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface InstagramMetrics {
@@ -106,6 +107,7 @@ const API_URL = (typeof window !== 'undefined' && window.location.hostname === '
     : "/api";
 
 export default function DashPage() {
+    const { token, logout, user } = useAuth();
     const [metrics, setMetrics] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -127,13 +129,17 @@ export default function DashPage() {
         let integrations: any[] = [];
         try {
             // 1. Fetch connected integrations (accounts)
-            const integrationsRes = await fetch(`${API_URL}/integrations`);
+            const integrationsRes = await fetch(`${API_URL}/integrations`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
             if (integrationsRes.ok) {
                 integrations = await integrationsRes.json();
             }
 
             // 2. Fetch sync status
-            const statusRes = await fetch(`${API_URL}/sync/status`);
+            const statusRes = await fetch(`${API_URL}/sync/status`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
             if (statusRes.ok) {
                 const statusData = await statusRes.json();
                 setSyncStatus(statusData);
@@ -157,7 +163,9 @@ export default function DashPage() {
                     };
 
                     try {
-                        const mRes = await fetch(`${API_URL}/metrics/${acc.platform}/${account_id}`);
+                        const mRes = await fetch(`${API_URL}/metrics/${acc.platform}/${account_id}`, {
+                            headers: { "Authorization": `Bearer ${token}` }
+                        });
                         if (mRes.ok) {
                             const mData = await mRes.json();
                             if (Array.isArray(mData) && mData.length > 0) {
@@ -199,7 +207,10 @@ export default function DashPage() {
     const handleSync = async () => {
         setIsSyncing(true);
         try {
-            const res = await fetch(`${API_URL}/sync`, { method: "POST" });
+            const res = await fetch(`${API_URL}/sync`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
             const data = await res.json();
 
             if (res.ok) {
@@ -302,7 +313,18 @@ export default function DashPage() {
             <div className="mb-12 flex justify-between items-end">
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Social Media Reporting</h1>
-                    <p className="text-slate-500 font-medium">Cross-platform performance analytics </p>
+                    <div className="flex items-center gap-4">
+                        <p className="text-slate-500 font-medium">Cross-platform performance analytics </p>
+                        <div className="w-1 h-1 rounded-full bg-slate-300" />
+                        <span className="text-xs font-bold text-slate-400">{user}</span>
+                        <button
+                            onClick={logout}
+                            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm"
+                        >
+                            <LogOut size={12} />
+                            Log Out
+                        </button>
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex flex-col items-end gap-1">

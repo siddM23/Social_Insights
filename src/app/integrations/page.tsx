@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, X, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronRight, Instagram, Facebook, LayoutGrid, Chrome } from "lucide-react";
+import { Plus, X, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronRight, Instagram, Facebook, LayoutGrid, Chrome, LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface PlatformCardProps {
@@ -133,6 +134,7 @@ const API_URL = (typeof window !== 'undefined' && window.location.hostname === '
     : "/api";
 
 export default function IntegrationsPage() {
+    const { token, logout, user } = useAuth();
     const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -163,7 +165,9 @@ export default function IntegrationsPage() {
 
     const fetchIntegrations = async () => {
         try {
-            const res = await fetch(`${API_URL}/integrations`);
+            const res = await fetch(`${API_URL}/integrations`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
             const data = await res.json();
             setConnectedAccounts(data);
         } catch (err) {
@@ -178,7 +182,8 @@ export default function IntegrationsPage() {
 
         try {
             const res = await fetch(`${API_URL}/integrations/${platform}/${accountId}`, {
-                method: "DELETE"
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` }
             });
 
             if (res.ok) {
@@ -193,19 +198,19 @@ export default function IntegrationsPage() {
     };
 
     const handleConnectInstagram = () => {
-        window.location.href = `${API_URL}/auth/instagram/login`;
+        window.location.href = `${API_URL}/auth/instagram/login?token=${token}`;
     };
 
     const handleConnectMeta = () => {
-        window.location.href = `${API_URL}/auth/meta/login`;
+        window.location.href = `${API_URL}/auth/meta/login?token=${token}`;
     };
 
     const handleConnectPinterest = () => {
-        window.location.href = `${API_URL}/auth/pinterest/login`;
+        window.location.href = `${API_URL}/auth/pinterest/login?token=${token}`;
     };
 
     const handleConnectYoutube = () => {
-        window.location.href = `${API_URL}/auth/youtube/login`;
+        window.location.href = `${API_URL}/auth/youtube/login?token=${token}`;
     };
 
     const filterAccounts = (platform: string) => {
@@ -259,7 +264,18 @@ export default function IntegrationsPage() {
             <div className="mb-12 flex items-center justify-between">
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Accounts</h1>
-                    <p className="text-slate-500 font-medium">Connect and manage your social platform integrations</p>
+                    <div className="flex items-center gap-4">
+                        <p className="text-slate-500 font-medium">Connect and manage your social platform integrations</p>
+                        <div className="w-1 h-1 rounded-full bg-slate-300" />
+                        <span className="text-xs font-bold text-slate-400">{user}</span>
+                        <button
+                            onClick={logout}
+                            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm"
+                        >
+                            <LogOut size={12} />
+                            Log Out
+                        </button>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     {isLoading && (
