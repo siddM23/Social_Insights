@@ -90,105 +90,170 @@ class InstagramClient:
                     logger.info(f"Page '{page.get('name')}' (ID: {page.get('id')}) has no connected Instagram Business Account.")
         return accounts
 
-    def get_user_insights(self, ig_user_id: str):
+    def get_user_insights(self, ig_user_id: str, period: str = 'day'):
         """
         Get basic user insights (Followers, Reach, Impressions, Profile Views).
-        Metric: impressions, reach, profile_views
-        Period: day (or 28 days for some)
-        Note: API limits might apply.
+        Params:
+            period: 'day', 'week', 'days_28'
         """
         url = f"{self.base_url}/{ig_user_id}/insights"
         
-        # User/Business discovery metrics
-        # For simplicity, getting daily metrics. 
-        # But `follower_count` is on the User object itself, not insights.
-        
-        # 1. Get User Profile Data (Followers, Media Count)
+        # 1. Get User Profile Data (Followers, Media Count) - Only if we need total followers
+        # Optimization: We might not need to call this every time if we just want mismatched period stats, 
+        # but for consistency we'll keep it or let the caller handle it. 
+        # For now, we'll fetch it to ensure we always have followers_total.
         user_url = f"{self.base_url}/{ig_user_id}"
-        logger.info(f"Fetching user profile for {ig_user_id}...")
         user_res = requests.get(user_url, params={
             "access_token": self.access_token,
             "fields": "followers_count,follows_count,media_count,name,username"
         }, timeout=10)
         user_data = user_res.json()
-        if "error" in user_data:
-            logger.error(f"Discovery error for {ig_user_id}: {user_data['error'].get('message')}")
-            raise Exception(f"Instagram Profile Error: {user_data['error'].get('message')}")
         
-        logger.info(f"Successfully fetched profile for {user_data.get('username')}")
+        # 2. Get Insights
+        # API Mapping:
+        # 7 days -> period='week' (supported by reach, impressions)
+        # 30 days -> period='days_28' (supported by reach, impressions)
         
-        # 2. Get Insights (Reach, Impressions, Profile Views)
-        # allowed period: day, week, days_28, month, lifetime (limited support)
-        # we will use 'day' for now or 'days_28' for overview?
-        # User requested "Views" (Organic/Ads), "Profile Visits", "Interactions", "Accounts Reached"
+        metric_param = "impressions,reach,profile_views"
+        api_period = period
         
-        # 'impressions', 'reach', 'profile_views' supports: period=day
+        if period == '7d':
+             api_period = 'week' # approx
+        elif period == '30d':
+             api_period = 'days_28' # approx
         
         params = {
             "access_token": self.access_token,
-            "metric": "impressions,reach,profile_views",
-            "period": "day" 
+            "metric": metric_param,
+            "period": api_period 
         }
-        logger.info(f"Fetching insights for {ig_user_id}...")
-        insights_res = requests.get(url, params=params, timeout=10)
-        insights_data = insights_res.json()
         
-        if "error" in insights_data:
-            logger.error(f"Insights error for {ig_user_id}: {insights_data['error'].get('message')}")
-            raise Exception(f"Instagram Insights Error: {insights_data['error'].get('message')}")
+        # Note: 'profile_views' only supports 'day'. We might need to sum 'day' for other periods?
+        # For simplicity, if period is not 'day', we might lose profile_views in single call or need separate call.
+        # Let's try to fetch all. If valid period error, we might handle it.
+        # Actually, `profile_views` DOES NOT support `week` or `days_28`. It only supports `day`.
+        # So for 7d/30d, we must fetch `day` and sum them up.
         
-        logger.info(f"Received insights data for {ig_user_id}: {json.dumps(insights_data)}")
+        # Revision: Always fetch `day` and sum up locally for exact control?
+        # `reach` and `impressions` are unique/reach, so summing `day` reach != `week` reach (uniques overlap).
+        # We SHOULD use `week`/`days_28` for reach/impressions if possible.
+        
+        # Strategy:
+        # 1. Fetch `reach,impressions` with requested period (week/days_28).
+        # 2. Fetch `profile_views` with `day` and sum last N days.
         
         result = {
             "followers_total": user_data.get("followers_count", 0),
-            "followers_new": 0, # Not directly available via API easily without delta tracking locally
-            "views_organic": 0, # Mapped to impressions?
-            "views_ads": 0, # Ads not available in standard Graph API usually
-            "interactions": 0, # Need to sum up media interactions?
+            "followers_new": 0,
+            "views_organic": 0,
+            "views_ads": 0,
+            "interactions": 0,
             "profile_visits": 0,
             "accounts_reached": 0
         }
         
-        if "data" in insights_data:
-            for item in insights_data["data"]:
-                name = item["name"]
-                # Sum values for the latest available day (usually yesterday)
-                # item['values'] is list of {value, end_time}
-                if item["values"]:
-                    # Take the most recent one
-                    latest_val = item["values"][-1]["value"]
-                    
-                    if name == "impressions":
-                        result["views_organic"] = latest_val
-                    elif name == "reach":
-                        result["accounts_reached"] = latest_val
-                    elif name == "profile_views":
-                        result["profile_visits"] = latest_val
-
-        # 3. Interactions (Likes + Comments on recent media) could be proxies
-        # Or `total_interactions` metric if available (deprecated?)
-        # Let's simple sum interactions from recent media (top 10?)
+        # A. Fetch Reach/Impressions (supports day, week, days_28)
+        # However, `profile_views` fails if we mix periods incompatible. 
+        # So we split the calls.
         
+        # Call 1: Organic Views (Impressions) & Reach
+        try:
+            p = 'day'
+            if period == '7d': p = 'week'
+            if period == '30d': p = 'days_28'
+            
+            res = requests.get(url, params={
+                "access_token": self.access_token,
+                "metric": "impressions,reach",
+                "period": p
+            }, timeout=10)
+            data = res.json()
+            
+            if "data" in data:
+                for item in data["data"]:
+                    if item["values"]:
+                        val = item["values"][-1]["value"] # Latest window value
+                        if item["name"] == "impressions": result["views_organic"] = val
+                        if item["name"] == "reach": result["accounts_reached"] = val
+        except Exception as e:
+            logger.error(f"Error fetching IG reach/impressions for {period}: {e}")
+
+        # Call 2: Profile Views (Always 'day', we sum up)
+        try:
+            days_to_sum = 1
+            if period == '7d': days_to_sum = 7
+            if period == '30d': days_to_sum = 30
+            
+            # We need slightly more data to sum correctly?
+            # 'period=day' usually returns last couple of days. 
+            # To get 30 days history, we need 'since' and 'until' params potentially.
+            # But standard `/insights` current window usually allows `since` and `until`.
+            
+            import datetime
+            until = datetime.datetime.now()
+            since = until - datetime.timedelta(days=days_to_sum)
+            
+            res = requests.get(url, params={
+                "access_token": self.access_token,
+                "metric": "profile_views",
+                "period": "day",
+                "since": int(since.timestamp()),
+                "until": int(until.timestamp())
+            }, timeout=10)
+            data = res.json()
+            
+            total_views = 0
+            if "data" in data:
+                for item in data["data"]:
+                    if item["name"] == "profile_views":
+                        for v in item["values"]:
+                            total_views += v["value"]
+            
+            result["profile_visits"] = total_views
+            
+        except Exception as e:
+            logger.error(f"Error fetching IG profile_views: {e}")
+
         return result
 
-    def get_media_interactions(self, ig_user_id: str):
+    def get_media_interactions(self, ig_user_id: str, days: int = 1):
         """
-        Get aggregated interactions (like_count + comments_count) from recent media.
+        Get aggregated interactions (like_count + comments_count) from media in the last N days.
         """
         url = f"{self.base_url}/{ig_user_id}/media"
         params = {
             "access_token": self.access_token,
             "fields": "like_count,comments_count,timestamp",
-            "limit": 50 
+            "limit": 100 # Fetch more to cover time window
         }
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
         
-        total_interactions = 0
-        if "data" in data:
-            for media in data["data"]:
-                # simple sum
-                total_interactions += media.get("like_count", 0)
-                total_interactions += media.get("comments_count", 0)
-        
-        return total_interactions
+        try:
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+            
+            total_interactions = 0
+            
+            import datetime
+            cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+            
+            if "data" in data:
+                for media in data["data"]:
+                    # Check timestamp
+                    # Format: "2024-10-24T12:00:00+0000"
+                    if media.get("timestamp"):
+                        try:
+                            # Simple ISO parsing (remove timezone if tricky or use str comparison if format consistent)
+                            # Timestamp usually ends with +0000
+                            ts_str = media["timestamp"].replace("+0000", "") 
+                            ts = datetime.datetime.fromisoformat(ts_str)
+                            
+                            if ts >= cutoff:
+                                total_interactions += media.get("like_count", 0)
+                                total_interactions += media.get("comments_count", 0)
+                        except:
+                            pass
+                            
+            return total_interactions
+        except Exception as e:
+            logger.error(f"Error fetching IG interactions: {e}")
+            return 0

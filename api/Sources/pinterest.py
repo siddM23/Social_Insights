@@ -23,18 +23,91 @@ class PinterestClient:
             return None
         return res.json()
 
-    def get_analytics(self, ad_account_id: str = None):
+    def get_analytics(self, ad_account_id: str = None, days: int = 30):
         """
         Get Pinterest Analytics. 
-        Note: Pinterest metrics can be complex. 
-        We'll try to get basic engagement metrics.
+        Tries to use SDK for Ad Account analytics first, falls back to User Account analytics.
+        Params:
+            days: Number of days to look back (e.g. 7 or 30)
         """
-        # User account analytics
-        url = f"{self.base_url}/user_account/analytics"
-        # We need a date range. Let's take last 30 days.
         import datetime
+        stats = {
+            "views": 0,
+            "clicks": 0,
+            "saves": 0,
+            "engagements": 0,
+            "audience": 0
+        }
+
         end_date = datetime.date.today()
-        start_date = end_date - datetime.timedelta(days=30)
+        start_date = end_date - datetime.timedelta(days=days)
+
+        # 1. Try to discover Ad Accounts (Business Account)
+        # Using requests for discovery as SDK discovery method might vary
+        try:
+            ad_url = f"{self.base_url}/ad_accounts"
+            ad_res = requests.get(ad_url, headers=self.headers)
+            
+            if ad_res.status_code == 200:
+                ad_data = ad_res.json()
+                items = ad_data.get('items', [])
+                
+                if items:
+                    target_account_id = items[0]['id']
+                    
+                    try:
+                        from pinterest.client import PinterestSDKClient
+                        from pinterest.ads.ad_accounts import AdAccount
+                        
+                        client = PinterestSDKClient.create_default_client(access_token=self.access_token)
+                        
+                        # SDK might require specific string format
+                        analytics = (
+                            AdAccount(ad_account_id=target_account_id, client=client)
+                            .get_analytics(
+                                start_date=start_date.strftime('%Y-%m-%d'),
+                                end_date=end_date.strftime('%Y-%m-%d'),
+                                columns=["IMPRESSION", "ENGAGEMENT", "AUDIENCE", "SAVE", "OUTBOUND_CLICK", "PIN_CLICK"],
+                                granularity="TOTAL"
+                            )
+                        )
+                        
+                        # Process SDK response
+                        # SDK typically returns an object or dict. Assuming dict or object with attributes.
+                        # Based on user snippet, print(analytics) -> likely a response object.
+                        # We need to inspect carefully. Assuming it acts like a dict or we can getattr.
+                        # If it's a list, take the first item.
+                        
+                        # Defensive parsing
+                        result = analytics
+                        if isinstance(analytics, list) and analytics:
+                            result = analytics[0]
+                            
+                        # Map fields
+                        # Note: Attributes might be lowercase key properties in SDK objects
+                        def get_val(obj, key):
+                            if isinstance(obj, dict):
+                                return obj.get(key, 0)
+                            return getattr(obj, key, 0)
+
+                        stats["views"] = int(get_val(result, "IMPRESSION") or 0)
+                        stats["engagements"] = int(get_val(result, "ENGAGEMENT") or 0)
+                        stats["audience"] = int(get_val(result, "AUDIENCE") or 0)
+                        stats["saves"] = int(get_val(result, "SAVE") or 0)
+                        stats["clicks"] = int(get_val(result, "PIN_CLICK") or 0) + int(get_val(result, "OUTBOUND_CLICK") or 0)
+                        
+                        return stats
+                        
+                    except ImportError:
+                        logger.warning("pinterest-api-sdk not installed or import failed. Falling back to requests.")
+                    except Exception as e:
+                        logger.error(f"SDK Analytics failed: {e}. Falling back to User Account analytics.")
+
+        except Exception as e:
+            logger.error(f"Ad Account discovery failed: {e}")
+
+        # 2. Fallback: User account analytics (Organic)
+        url = f"{self.base_url}/user_account/analytics"
         
         params = {
             "start_date": start_date.isoformat(),
@@ -45,18 +118,9 @@ class PinterestClient:
         res = requests.get(url, headers=self.headers, params=params)
         if res.status_code != 200:
             logger.error(f"Error fetching Pinterest analytics: {res.text}")
-            return None
+            return stats # Return empty stats
             
         data = res.json()
-        logger.info(f"Pinterest raw analytics response: {json.dumps(data)}")
-        
-        stats = {
-            "views": 0,
-            "clicks": 0,
-            "saves": 0,
-            "engagements": 0,
-            "audience": 0
-        }
         
         # Pinterest V5 returns daily metrics in 'all' -> 'daily_metrics'
         if "all" in data:
@@ -79,5 +143,4 @@ class PinterestClient:
                     stats["saves"] += int(metrics.get("SAVE", 0))
                     stats["engagements"] += int(metrics.get("ENGAGEMENT", 0))
             
-        logger.info(f"Final aggregated Pinterest stats: {stats}")
         return stats

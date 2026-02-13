@@ -42,10 +42,12 @@ class YouTubeClient:
                 })
         return channels
 
-    def get_channel_insights(self, channel_id: str):
+    def get_channel_insights(self, channel_id: str, days: int = 30):
         """
         Get YouTube Channel insights using YouTube Analytics API.
         Metrics mapped to our standard format.
+        Params:
+            days: Number of days to look back (e.g. 7 or 30)
         """
         # 1. Get current stats via Data API (for total followers)
         url = f"{self.base_url}/channels"
@@ -64,17 +66,23 @@ class YouTubeClient:
         except Exception as e:
             logger.error(f"Error fetching YouTube follower stats: {e}")
 
-        # 2. Get daily metrics via Analytics API
+        # 2. Get aggregated metrics via Analytics API
+        # To get totals for the period, we remove 'dimensions=day'
+        
+        # YouTube data is usually delayed by 2-3 days. 
+        # If we ask for 'today', we might get partial or no data for recent days.
+        # But for a 30-day window, requesting up to 'today' usually returns sum of available days.
+        
         end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d") # Use last 2 days to ensure data exists
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         
         analytics_params = {
             "ids": f"channel=={channel_id}",
             "startDate": start_date,
             "endDate": end_date,
             "metrics": "views,subscribersGained,likes,comments,shares,estimatedMinutesWatched",
-            "dimensions": "day",
-            "sort": "-day",
+            # "dimensions": "day", # Removed to get totals
+            # "sort": "-day",      # Removed
             "access_token": self.access_token
         }
         
@@ -93,13 +101,14 @@ class YouTubeClient:
             data = res.json()
             
             if "rows" in data and len(data["rows"]) > 0:
-                latest_row = data["rows"][0]
+                # With no dimensions, we get a single row with totals
+                row = data["rows"][0]
                 # Map based on standard column headers index
                 # views, subscribersGained, likes, comments, shares, estimatedMinutesWatched
-                result["views_organic"] = int(latest_row[1])
-                result["followers_new"] = int(latest_row[2])
-                result["interactions"] = int(latest_row[3]) + int(latest_row[4]) + int(latest_row[5])
-                result["accounts_reached"] = int(latest_row[1]) # YouTube Views ~ Reach
+                result["views_organic"] = int(row[0])
+                result["followers_new"] = int(row[1])
+                result["interactions"] = int(row[2]) + int(row[3]) + int(row[4])
+                result["accounts_reached"] = int(row[0]) # YouTube Views ~ Reach
         except Exception as e:
             logger.error(f"Error fetching YouTube analytics: {e}")
             if "error" in locals() and "data" in locals():

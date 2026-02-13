@@ -1,0 +1,61 @@
+
+version: '3.8'
+
+services:
+  # Backend Service (FastAPI)
+  backend:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: social_insights_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - FRONTEND_URL=http://localhost:3000
+      # Pass AWS Credentials from host or .env file
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      # Social Auth Config
+      - Instagram_app_id=${Instagram_app_id}
+      - Instagram_app_secret=${Instagram_app_secret}
+      - Pinterest_app_id=${Pinterest_app_id}
+      - Pinterest_app_secret=${Pinterest_app_secret}
+      - META_REDIRECT_URI=http://localhost:3000/auth/meta/callback
+      - PINTEREST_REDIRECT_URI=http://localhost:3000/auth/pinterest/callback
+      - INSTAGRAM_REDIRECT_URI=http://localhost:3000/auth/instagram/callback
+      - JWT_SECRET=${JWT_SECRET:-super-secret-key}
+      - SYNC_MAX_LIMIT=10
+    volumes:
+      - ./api:/app
+    # Restart on failure to handle transient issues
+    restart: always
+
+  # Frontend Service (Next.js)
+  frontend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: social_insights_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Internal API URL for Server Side Rendering (if needed) or Rewrites
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    # Map volumes for development (optional, if you want hot reload, you'd use 'npm run dev' in CMD)
+    # For production build simulation:
+    restart: always
+
+# Optional: Add a local DynamoDB if you want to be fully offline
+# dynamodb-local:
+#   command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+#   image: "amazon/dynamodb-local:latest"
+#   container_name: dynamodb-local
+#   ports:
+#     - "8000:8000"
+#   volumes:
+#     - "./docker/dynamodb:/home/dynamodblocal/data"
+#   working_dir: /home/dynamodblocal

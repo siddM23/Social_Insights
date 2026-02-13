@@ -108,6 +108,7 @@ const API_URL = (typeof window !== 'undefined' && window.location.hostname === '
 
 export default function DashPage() {
     const { token, logout, user } = useAuth();
+    const [timeRange, setTimeRange] = useState<'7d' | '30d'>('30d');
     const [metrics, setMetrics] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -149,17 +150,11 @@ export default function DashPage() {
             if (Array.isArray(integrations) && integrations.length > 0) {
                 const promises = integrations.map(async (acc: any) => {
                     const account_id = acc.account_id;
-                    let m = {
-                        accountName: acc.account_name || acc.account_id,
-                        followersTotal: 0,
-                        followersNew: 0,
-                        viewsOrganic: 0,
-                        viewsAds: 0,
-                        interactions: 0,
-                        profileVisits: 0,
-                        accountsReached: 0,
-                        saves: 0,
-                        platform: acc.platform
+                    // Default / Fallback structure
+                    let fullData = {
+                        period_7d: {},
+                        period_30d: {},
+                        followers_total: 0
                     };
 
                     try {
@@ -170,24 +165,18 @@ export default function DashPage() {
                             const mData = await mRes.json();
                             if (Array.isArray(mData) && mData.length > 0) {
                                 const latest = mData[0];
-                                m = {
-                                    accountName: acc.account_name || acc.account_id,
-                                    followersTotal: parseInt(latest.followers_total) || 0,
-                                    followersNew: parseInt(latest.followers_new) || 0,
-                                    viewsOrganic: parseInt(latest.views_organic) || 0,
-                                    viewsAds: parseInt(latest.views_ads) || 0,
-                                    interactions: parseInt(latest.interactions) || 0,
-                                    profileVisits: parseInt(latest.profile_visits) || 0,
-                                    accountsReached: parseInt(latest.accounts_reached) || 0,
-                                    saves: parseInt(latest.saves) || 0,
-                                    platform: acc.platform
-                                };
+                                fullData = latest;
                             }
                         }
                     } catch (err) {
                         console.warn(`Failed fetching metrics for ${account_id}`, err);
                     }
-                    return m;
+
+                    return {
+                        accountName: acc.account_name || acc.account_id,
+                        platform: acc.platform,
+                        data: fullData
+                    };
                 });
 
                 const results = await Promise.all(promises);
@@ -244,10 +233,40 @@ export default function DashPage() {
         loadDashboardData();
     }, []);
 
+    // Helper to extract metric for the selected time range
+    const getMetric = (m: any, field: string) => {
+        // m is the item from results array: { accountName, platform, data: { ... } }
+        const raw = m.data;
+        const periodData = timeRange === '7d' ? raw.period_7d : raw.period_30d;
+
+        // If new structure exists, use it
+        if (periodData && typeof periodData === 'object') {
+            return periodData[field] || 0;
+        }
+
+        // Fallback to root (legacy data), but strictly speaking legacy data was undefined period (usually 30d or mixed)
+        // If we are asking for 7d and only legacy exists, it's inaccurate but better than 0?
+        // Or we return 0. Let's return root if periodData is missing to be safe for now.
+        return raw[field] || 0;
+    };
+
+    const mapToRowData = (m: any) => ({
+        accountName: m.accountName,
+        platform: m.platform,
+        followersTotal: parseInt(m.data.followers_total) || 0, // Total is always at root
+        followersNew: parseInt(getMetric(m, 'followers_new')),
+        viewsOrganic: parseInt(getMetric(m, 'views_organic')),
+        viewsAds: parseInt(getMetric(m, 'views_ads')),
+        interactions: parseInt(getMetric(m, 'interactions')),
+        profileVisits: parseInt(getMetric(m, 'profile_visits')),
+        accountsReached: parseInt(getMetric(m, 'accounts_reached')),
+        saves: parseInt(getMetric(m, 'saves'))
+    });
+
     const groupedMetrics = {
-        instagram: metrics.filter(m => m.platform === 'instagram'),
-        meta: metrics.filter(m => m.platform === 'meta' || m.platform === 'facebook'),
-        pinterest: metrics.filter(m => m.platform === 'pinterest')
+        instagram: metrics.filter(m => m.platform === 'instagram').map(mapToRowData),
+        meta: metrics.filter(m => ['meta', 'facebook'].includes(m.platform)).map(mapToRowData),
+        pinterest: metrics.filter(m => m.platform === 'pinterest').map(mapToRowData)
     };
 
     const renderTable = (platform: string, data: any[]) => {
@@ -317,6 +336,30 @@ export default function DashPage() {
                         <p className="text-slate-500 font-medium">Cross-platform performance analytics </p>
                         <div className="w-1 h-1 rounded-full bg-slate-300" />
                         <span className="text-xs font-bold text-slate-400">{user}</span>
+                        <div className="w-1 h-1 rounded-full bg-slate-300" />
+
+                        {/* 7D / 30D Switch */}
+                        <div className="flex p-1 bg-slate-100 rounded-xl">
+                            <button
+                                onClick={() => setTimeRange('7d')}
+                                className={cn(
+                                    "px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                                    timeRange === '7d' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                7 Days
+                            </button>
+                            <button
+                                onClick={() => setTimeRange('30d')}
+                                className={cn(
+                                    "px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                                    timeRange === '30d' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                30 Days
+                            </button>
+                        </div>
+
                         <button
                             onClick={logout}
                             className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm"
@@ -328,6 +371,14 @@ export default function DashPage() {
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-2">
+                            {/* Last Synced Display */}
+                            {syncStatus.last_sync_time && (
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                    Last Synced: {new Date(syncStatus.last_sync_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sync Limit</span>
                             <div className="flex gap-1">

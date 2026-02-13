@@ -16,6 +16,12 @@ def init_tables():
     # SK: timestamp (ISO String)
     activity_db.create_table(pk='user_id', sk='timestamp')
 
+    print("\nInitializing social_metrics table...")
+    metrics_db = DynamoDB('social_metrics')
+    # PK: account_id (composite: platform#id)
+    # SK: timestamp
+    metrics_db.create_table(pk='account_id', sk='timestamp')
+
     print("\nTable initialization complete.")
 
 if __name__ == "__main__":

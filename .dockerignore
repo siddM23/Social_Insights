@@ -1,0 +1,10 @@
+
+# Ignore node_modules
+node_modules
+.next
+.git
+.DS_Store
+
+# Ignore the api folder in the frontend build context to keep it clean
+# (The api has its own Dockerfile and context)
+api/

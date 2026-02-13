@@ -43,7 +43,7 @@ load_dotenv()
 
 # Initialize DB instances
 integrations_db = DynamoDB('socials_integrations')
-metrics_db = DynamoDB('instagram_metrics')
+metrics_db = DynamoDB('social_metrics')
 status_db = DynamoDB('app_status')
 users_db = DynamoDB('social_users')
 activity_db = DynamoDB('user_activity')
@@ -566,6 +566,19 @@ def run_full_sync():
             logger.error(f"Background sync failed for {account.get('account_id')}: {e}")
     logger.info("Full background sync complete.")
 
+def _update_integration_sync_time(platform: str, account_id: str):
+    """Helper to update last_synced_at in integrations table"""
+    try:
+        timestamp = datetime.datetime.utcnow().isoformat()
+        # We need to fetch the item first to preserve other fields, or use update expression
+        # Since our DB wrapper is simple, allow's fetch-modify-save
+        item = integrations_db.get_item({'platform': platform, 'account_id': account_id})
+        if item:
+            item['last_synced_at'] = timestamp
+            integrations_db.save_item(item)
+    except Exception as e:
+        logger.error(f"Failed to update sync time for {platform}/{account_id}: {e}")
+
 def sync_account(account_id: str, access_token: str) -> Optional[Dict[str, Any]]:
     from Sources.instagram import InstagramClient
     
@@ -605,14 +618,14 @@ def sync_account(account_id: str, access_token: str) -> Optional[Dict[str, Any]]
             logger.error(f"Error during account discovery for {account_id}: {e}")
             return None
 
-    metrics = {}
     try:
-        fetched_metrics = client.get_user_insights(account_id)
-        interactions = client.get_media_interactions(account_id)
+        # Fetch 7 Days
+        m7 = client.get_user_insights(account_id, period='7d')
+        m7['interactions'] = client.get_media_interactions(account_id, days=7)
         
-        # Merge
-        metrics = fetched_metrics
-        metrics['interactions'] = interactions
+        # Fetch 30 Days
+        m30 = client.get_user_insights(account_id, period='30d')
+        m30['interactions'] = client.get_media_interactions(account_id, days=30)
         
     except Exception as e:
         print(f"Error fetching from Instagram API for {account_id}: {e}")
@@ -628,18 +641,26 @@ def sync_account(account_id: str, access_token: str) -> Optional[Dict[str, Any]]
             'account_id': storage_id,
             'timestamp': timestamp,
             'platform': 'instagram',
-            'followers_total': metrics.get('followers_total', 0),
-            'followers_new': metrics.get('followers_new', 0), 
-            'views_organic': metrics.get('views_organic', 0),
-            'views_ads': metrics.get('views_ads', 0),
-            'interactions': metrics.get('interactions', 0),
-            'profile_visits': metrics.get('profile_visits', 0),
-            'accounts_reached': metrics.get('accounts_reached', 0)
+            'followers_total': m30.get('followers_total', 0), # Total is same for both
+            'period_7d': m7,
+            'period_30d': m30
         }
         
+        # Backward compatibility fields (optional, but good for safety if UI breaks)
+        item.update({
+            'followers_new': m30.get('followers_new', 0), 
+            'views_organic': m30.get('views_organic', 0),
+            'views_ads': m30.get('views_ads', 0),
+            'interactions': m30.get('interactions', 0),
+            'profile_visits': m30.get('profile_visits', 0),
+            'accounts_reached': m30.get('accounts_reached', 0)
+        })
+        
         metrics_db.save_item(item)
-        logger.info(f"Synced metrics for {account_id}")
-        return item # Return the item so it can be used immediately
+        _update_integration_sync_time('instagram', account_id.lower())
+        
+        logger.info(f"Synced metrics (7d & 30d) for {account_id}")
+        return item 
 
     except Exception as e:
         logger.error(f"Error saving synced data for {account_id}: {e}")
@@ -650,40 +671,55 @@ def sync_pinterest_account(account_id: str, access_token: str) -> Optional[Dict[
     
     client = PinterestClient(access_token)
     try:
-        # Get basics
-        stats = client.get_analytics()
-        if not stats:
+        # Fetch 7 Days
+        s7 = client.get_analytics(days=7)
+        # Fetch 30 Days
+        s30 = client.get_analytics(days=30)
+        
+        if not s30: # If 30 fails, we probably failed
             return None
             
+        # Get Profile for total followers
+        profile = client.get_account_info()
+        followers_total = 0
+        account_name = account_id
+        if profile:
+            followers_total = profile.get('follower_count', 0)
+            account_name = profile.get('username', account_id)
+        elif s30.get('audience'):
+             followers_total = s30.get('audience', 0)
+
+        # Helper to format pinterest stats to generic schema
+        def fmt(s):
+            return {
+                'followers_new': 0,
+                'views_organic': s.get('views', 0),
+                'views_ads': 0,
+                'interactions': s.get('engagements', 0),
+                'profile_visits': s.get('clicks', 0), # Clicks as profile visits proxy
+                'accounts_reached': s.get('views', 0),
+                'saves': s.get('saves', 0)
+            }
+
         timestamp = datetime.datetime.utcnow().isoformat()
-        
-        # Use composite ID for storage
         storage_id = f"pinterest#{account_id.lower()}"
         
         item = {
             'account_id': storage_id,
             'timestamp': timestamp,
             'platform': 'pinterest',
-            'followers_total': stats.get('audience', 0), 
-            'followers_new': 0,
-            'views_organic': stats.get('views', 0),
-            'views_ads': 0,
-            'interactions': stats.get('engagements', 0),
-            'profile_visits': stats.get('clicks', 0),
-            'accounts_reached': stats.get('views', 0),
-            'saves': stats.get('saves', 0)
+            'followers_total': followers_total,
+            'period_7d': fmt(s7),
+            'period_30d': fmt(s30)
         }
         
-        # Optionally get profile for followers
-        profile = client.get_account_info()
-        if profile:
-            # Pinterest Audience maps to followers_total for our generic schema
-            item['followers_total'] = profile.get('follower_count', 0)
-            item['account_name'] = profile.get('username', account_id)
-        elif stats.get('audience'):
-             item['followers_total'] = stats.get('audience', 0)
+        # Backwards compat
+        item.update(fmt(s30))
+        item['account_name'] = account_name
 
         metrics_db.save_item(item)
+        _update_integration_sync_time('pinterest', account_id.lower())
+        
         logger.info(f"Synced Pinterest metrics for {account_id}")
         return item
 
@@ -703,9 +739,10 @@ def sync_meta_account(account_id: str, access_token: str) -> Optional[Dict[str, 
     client = MetaClient(access_token)
     
     try:
-        # For Facebook, we might need the Page Access Token if the User token isn't enough
-        # But for now we try with user token
-        metrics = client.get_page_insights(account_id)
+        # Fetch 7 Days
+        m7 = client.get_page_insights(account_id, period='7d')
+        # Fetch 30 Days
+        m30 = client.get_page_insights(account_id, period='30d')
         
         timestamp = datetime.datetime.utcnow().isoformat()
         storage_id = f"facebook#{account_id.lower()}"
@@ -714,16 +751,24 @@ def sync_meta_account(account_id: str, access_token: str) -> Optional[Dict[str, 
             'account_id': storage_id,
             'timestamp': timestamp,
             'platform': 'facebook',
-            'followers_total': metrics.get('followers_total', 0),
-            'followers_new': metrics.get('followers_new', 0), 
-            'views_organic': metrics.get('views_organic', 0),
-            'views_ads': metrics.get('views_ads', 0),
-            'interactions': metrics.get('interactions', 0),
-            'profile_visits': metrics.get('profile_visits', 0),
-            'accounts_reached': metrics.get('accounts_reached', 0)
+            'followers_total': m30.get('followers_total', 0),
+            'period_7d': m7,
+            'period_30d': m30
         }
         
+        # Backwards compat
+        item.update({
+             'followers_new': m30.get('followers_new', 0), 
+            'views_organic': m30.get('views_organic', 0),
+            'views_ads': m30.get('views_ads', 0),
+            'interactions': m30.get('interactions', 0),
+            'profile_visits': m30.get('profile_visits', 0),
+            'accounts_reached': m30.get('accounts_reached', 0)
+        })
+        
         metrics_db.save_item(item)
+        _update_integration_sync_time('facebook', account_id.lower())
+        
         logger.info(f"Synced Meta (Facebook) metrics for {account_id}")
         return item
 
@@ -738,7 +783,10 @@ def sync_youtube_account(account_id: str, access_token: str) -> Optional[Dict[st
     client = YouTubeClient(access_token)
     
     try:
-        insights = client.get_channel_insights(account_id)
+        # Fetch 7 Days
+        m7 = client.get_channel_insights(account_id, days=7)
+        # Fetch 30 Days
+        m30 = client.get_channel_insights(account_id, days=30)
         
         timestamp = datetime.datetime.utcnow().isoformat()
         storage_id = f"youtube#{account_id}"
@@ -747,16 +795,24 @@ def sync_youtube_account(account_id: str, access_token: str) -> Optional[Dict[st
             'account_id': storage_id,
             'timestamp': timestamp,
             'platform': 'youtube',
-            'followers_total': insights.get("followers_total", 0),
-            'followers_new': insights.get("followers_new", 0),
-            'views_organic': insights.get("views_organic", 0),
-            'views_ads': 0,
-            'interactions': insights.get("interactions", 0),
-            'profile_visits': 0,
-            'accounts_reached': insights.get("accounts_reached", 0)
+            'followers_total': m30.get("followers_total", 0),
+            'period_7d': m7,
+            'period_30d': m30
         }
         
+        # Backwards compat
+        item.update({
+            'followers_new': m30.get("followers_new", 0),
+            'views_organic': m30.get("views_organic", 0),
+            'views_ads': 0,
+            'interactions': m30.get("interactions", 0),
+            'profile_visits': 0,
+            'accounts_reached': m30.get("accounts_reached", 0)
+        })
+        
         metrics_db.save_item(item)
+        _update_integration_sync_time('youtube', account_id)
+        
         logger.info(f"YouTube Sync complete for {account_id}")
         return item
 
