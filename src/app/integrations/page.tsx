@@ -1,129 +1,84 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, X, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronRight, Instagram, Facebook, LayoutGrid, Chrome, LogOut } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
+import { Plus, X, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 interface PlatformCardProps {
-    id: string;
     title: string;
-    description?: string;
+    description: string;
     icon: React.ReactNode;
-    accounts: { email: string; status: "Active" | "Inactive"; account_id: string; account_name: string }[];
+    accounts: { email?: string; status: string; account_id: string; account_name: string }[];
     accentColor: string;
     onConnect: () => void;
-    onRemove: (accountId: string) => void;
-    isActive?: boolean;
+    onDelete: (accountId: string) => void;
 }
 
 const PlatformCard: React.FC<PlatformCardProps> = ({
-    id,
     title,
     description,
     icon,
     accounts,
     accentColor,
     onConnect,
-    onRemove,
-    isActive = true
+    onDelete
 }) => {
-    const [isExpanded, setIsExpanded] = useState(id === "instagram");
-
     return (
-        <div className={cn(
-            "group bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden transition-all duration-500 mb-6",
-            !isActive && "opacity-60 grayscale-[0.5] bg-slate-50/50"
-        )}>
-            {/* Header / Trigger */}
-            <div
-                onClick={() => isActive && setIsExpanded(!isExpanded)}
-                className={cn(
-                    "p-6 flex items-center justify-between cursor-pointer select-none transition-colors",
-                    isExpanded ? "bg-slate-50/50" : "hover:bg-slate-50/30"
-                )}
-            >
-                <div className="flex items-center gap-5">
-                    <div className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-transform duration-500 group-hover:scale-110",
-                        accentColor
-                    )}>
-                        {icon}
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight">{title}</h3>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full uppercase tracking-widest">
-                                {accounts.length} {accounts.length === 1 ? 'Account' : 'Accounts'}
-                            </span>
-                        </div>
-                        <p className="text-sm text-slate-500 font-medium">{description}</p>
-                    </div>
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col min-h-[450px] transition-all duration-300 hover:shadow-indigo-100/50 hover:-translate-y-1">
+            <div className="p-8 border-b border-slate-100 flex items-start gap-5">
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg", accentColor)}>
+                    {icon}
                 </div>
+                <div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-1">{title}</h3>
+                    <p className="text-sm text-slate-500 leading-relaxed font-medium">{description}</p>
+                </div>
+            </div>
 
-                <div className="flex items-center gap-4">
-                    {isActive ? (
-                        <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 text-slate-400 border border-slate-200 transition-all duration-300",
-                            isExpanded ? "rotate-180 bg-slate-900 text-white border-slate-900 shadow-md" : "group-hover:bg-slate-200"
-                        )}>
-                            <ChevronDown size={18} strokeWidth={3} />
-                        </div>
+            <div className="p-8 flex-1 bg-slate-50/10">
+                <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Connected Accounts</h4>
+                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full uppercase tracking-wider">{accounts.length} Total</span>
+                </div>
+                <div className="space-y-4 max-h-[200px] overflow-y-auto pr-2 no-scrollbar">
+                    {accounts.length > 0 ? (
+                        accounts.map((acc, i) => (
+                            <div key={acc.account_id || i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl hover:border-slate-300 transition-all shadow-sm shadow-slate-100 hover:shadow-md">
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-[14px] font-bold text-slate-900">{acc.account_name}</span>
+                                    {acc.email && <span className="text-[11px] text-slate-500 font-medium">{acc.email}</span>}
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 w-fit rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider mt-1">
+                                        <CheckCircle2 size={10} />
+                                        {acc.status || "Active"}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => onDelete(acc.account_id)}
+                                    className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        ))
                     ) : (
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">Coming Soon</span>
+                        <div className="border-2 border-dashed border-slate-100 rounded-3xl h-40 flex flex-col items-center justify-center text-slate-300 gap-3 bg-slate-50/30">
+                            <AlertCircle size={32} className="opacity-20" />
+                            <span className="text-xs font-bold uppercase tracking-widest opacity-60">No accounts connected</span>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* Collapsible Content */}
-            <div className={cn(
-                "grid transition-all duration-500 ease-in-out overflow-hidden",
-                isExpanded ? "grid-rows-[1fr] opacity-100 border-t border-slate-100" : "grid-rows-[0fr] opacity-0"
-            )}>
-                <div className="min-h-0">
-                    <div className="p-8 space-y-6">
-                        {/* Connected Accounts List */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {accounts.length > 0 ? (
-                                accounts.map((acc, i) => (
-                                    <div key={acc.account_id || i} className="group/item relative flex items-center justify-between p-5 bg-white border border-slate-100 rounded-3xl hover:border-indigo-200 transition-all shadow-sm hover:shadow-indigo-100/50 hover:-translate-y-1">
-                                        <div className="flex flex-col gap-1">
-                                            <span className="text-[15px] font-black text-slate-900">{acc.account_name}</span>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{acc.account_id}</span>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onRemove(acc.account_id); }}
-                                            className="opacity-0 group-item-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-2xl transition-all"
-                                        >
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="col-span-full py-12 flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
-                                    <div className="w-16 h-16 rounded-3xl bg-white border border-slate-100 flex items-center justify-center shadow-sm mb-4">
-                                        <AlertCircle size={28} className="text-slate-200" />
-                                    </div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No accounts connected yet</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Action Bar */}
-                        <div className="pt-4 border-t border-slate-100 flex justify-end">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onConnect(); }}
-                                className="px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-800 transition-all duration-300 flex items-center gap-3 shadow-xl shadow-slate-200 group/btn active:scale-95"
-                            >
-                                <Plus size={18} strokeWidth={3} className="text-white/60 group-btn-hover:text-white transition-colors" />
-                                Add {title} Profile
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            <div className="p-8 pt-0">
+                <button
+                    onClick={onConnect}
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-3 shadow-lg shadow-slate-200 group active:scale-[0.98]"
+                >
+                    <Plus size={20} className="text-white/70 group-hover:text-white transition-colors" />
+                    Connect {title.split(' ')[0]} Account
+                </button>
             </div>
         </div>
     );
@@ -134,42 +89,37 @@ const API_URL = (typeof window !== 'undefined' && window.location.hostname === '
     : "/api";
 
 export default function IntegrationsPage() {
-    const { token, logout, user } = useAuth();
+    const { token } = useAuth();
     const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        fetchIntegrations();
+        if (token) fetchIntegrations();
+    }, [token]);
 
-        // Handle OAuth callback status from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const status = urlParams.get('status');
-        const platform = urlParams.get('platform');
-        const count = urlParams.get('count');
-        const message = urlParams.get('message');
-
-        if (status === 'success') {
-            fetchIntegrations();
-            alert(`Successfully connected ${count || 1} ${platform} account(s)!`);
-            window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (status === 'error') {
-            alert(`Failed to connect: ${message || "Unknown error"}`);
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
-    }, []);
-
-    const handleCompleteSocialAuth = async (token: string, platform: string) => {
-        // This function is no longer needed as the backend auto-saves
-        console.log("Social auth completed on backend for", platform);
+    const authFetch = (url: string, options: any = {}) => {
+        return fetch(url, {
+            ...options,
+            headers: {
+                ...options.headers,
+                "Authorization": `Bearer ${token}`
+            }
+        });
     };
 
     const fetchIntegrations = async () => {
         try {
-            const res = await fetch(`${API_URL}/integrations`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
+            const res = await authFetch(`${API_URL}/integrations`);
+            if (!res.ok) {
+                console.error(`API Error: ${res.status} ${res.statusText}`);
+                return;
+            }
             const data = await res.json();
-            setConnectedAccounts(data);
+            if (Array.isArray(data)) {
+                setConnectedAccounts(data);
+            } else {
+                console.error("Expected array from /integrations, got:", data);
+            }
         } catch (err) {
             console.error("Failed to fetch integrations", err);
         } finally {
@@ -177,48 +127,55 @@ export default function IntegrationsPage() {
         }
     };
 
-    const handleRemoveAccount = async (platform: string, accountId: string) => {
-        if (!confirm(`Are you sure you want to remove this ${platform} account?`)) return;
-
+    const handleConnect = async (platform: string) => {
         try {
-            const res = await fetch(`${API_URL}/integrations/${platform}/${accountId}`, {
-                method: "DELETE",
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-
-            if (res.ok) {
-                fetchIntegrations();
+            const res = await authFetch(`${API_URL}/auth/${platform}/login`);
+            // The backend might return a direct redirect or a JSON with URL
+            if (res.redirected) {
+                window.location.href = res.url;
             } else {
-                alert("Failed to remove account.");
+                const data = await res.json();
+                if (data.url) {
+                    window.location.href = data.url;
+                }
             }
         } catch (err) {
-            console.error(err);
-            alert("Error removing account.");
+            alert(`Failed to start ${platform} OAuth flow`);
         }
     };
 
-    const handleConnectInstagram = () => {
-        window.location.href = `${API_URL}/auth/instagram/login?token=${token}`;
-    };
+    const handleDelete = async (platform: string, accountId: string) => {
+        if (!confirm("Are you sure you want to disconnect this account?")) return;
 
-    const handleConnectMeta = () => {
-        window.location.href = `${API_URL}/auth/meta/login?token=${token}`;
-    };
+        try {
+            const res = await authFetch(`${API_URL}/integrations/${platform}/${accountId}`, {
+                method: "DELETE",
+            });
 
-    const handleConnectPinterest = () => {
-        window.location.href = `${API_URL}/auth/pinterest/login?token=${token}`;
-    };
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || "Failed to delete integration");
+            }
 
-    const handleConnectYoutube = () => {
-        window.location.href = `${API_URL}/auth/youtube/login?token=${token}`;
+            // Refresh list
+            fetchIntegrations();
+        } catch (err) {
+            console.error(err);
+            alert("Error deleting integration");
+        }
     };
 
     const filterAccounts = (platform: string) => {
-        return connectedAccounts
-            .filter(a => a.platform.toLowerCase() === platform.toLowerCase())
+        const accounts = Array.isArray(connectedAccounts) ? connectedAccounts : [];
+        return accounts
+            .filter(a => {
+                const p = a?.platform?.toLowerCase();
+                if (platform === 'meta') return p === 'meta' || p === 'facebook';
+                return p === platform.toLowerCase();
+            })
             .map(a => ({
-                email: a.email || "N/A",
-                status: (a.additional_info?.status || "Active") as "Active" | "Inactive",
+                email: a.email,
+                status: a.additional_info?.status || "Active",
                 account_id: a.account_id,
                 account_name: a.account_name || a.account_id
             }));
@@ -228,72 +185,61 @@ export default function IntegrationsPage() {
         {
             id: "instagram",
             title: "Instagram",
-            icon: <img src="/instagram1.png" alt="Instagram" className="w-8 h-8 object-contain" />,
-            accentColor: "bg-white border border-slate-100",
-            onConnect: handleConnectInstagram,
-            isActive: true
+            description: "Connect your Instagram Business accounts",
+            icon: <Image src="/instagram1.jpeg" alt="Instagram" width={32} height={32} className="object-contain" />,
+            accentColor: "bg-white",
+            onConnect: () => handleConnect("instagram")
         },
         {
-            id: "facebook",
-            title: "Meta",
-            icon: <img src="/facebook1.png" alt="Meta" className="w-8 h-8 object-contain" />,
-            accentColor: "bg-white border border-slate-100",
-            onConnect: handleConnectMeta,
-            isActive: true
-        },
-        {
-            id: "pinterest",
-            title: "Pinterest",
-            icon: <img src="/pinterest1.png" alt="Pinterest" className="w-8 h-8 object-contain" />,
-            accentColor: "bg-white border border-slate-100",
-            onConnect: handleConnectPinterest,
-            isActive: true
+            id: "meta",
+            title: "Meta (Facebook)",
+            description: "Connect your Facebook Pages",
+            icon: <Image src="/facebook.png" alt="Meta" width={32} height={32} className="object-contain" />,
+            accentColor: "bg-white",
+            onConnect: () => handleConnect("meta")
         },
         {
             id: "youtube",
             title: "YouTube",
-            icon: <img src="/youtube.png" alt="YouTube" className="w-8 h-8 object-contain" />,
-            accentColor: "bg-white border border-slate-100",
-            onConnect: handleConnectYoutube,
-            isActive: true
+            description: "Connect your YouTube Channels",
+            icon: <Image src="/youtube.png" alt="YouTube" width={32} height={32} className="object-contain" />,
+            accentColor: "bg-white",
+            onConnect: () => handleConnect("youtube")
+        },
+        {
+            id: "pinterest",
+            title: "Pinterest",
+            description: "Connect your Pinterest accounts",
+            icon: <Image src="/pinterest.png" alt="Pinterest" width={32} height={32} className="object-contain" />,
+            accentColor: "bg-white",
+            onConnect: () => handleConnect("pinterest")
         }
     ];
 
     return (
-        <div className="p-8 max-w-7xl mx-auto">
-            <div className="mb-12 flex items-center justify-between">
+        <div className="p-8">
+            <div className="mb-12 flex justify-between items-end">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Accounts</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Integrations</h1>
                     <div className="flex items-center gap-4">
-                        <p className="text-slate-500 font-medium">Connect and manage your social platform integrations</p>
-                        <div className="w-1 h-1 rounded-full bg-slate-300" />
-                        <span className="text-xs font-bold text-slate-400">{user}</span>
-                        <button
-                            onClick={logout}
-                            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm"
-                        >
-                            <LogOut size={12} />
-                            Log Out
-                        </button>
+                        <p className="text-slate-500">Manage your connected social platforms</p>
+                        {isLoading && (
+                            <>
+                                <div className="w-1 h-1 rounded-full bg-slate-200" />
+                                <Loader2 className="animate-spin text-slate-400" size={16} />
+                            </>
+                        )}
                     </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    {isLoading && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full">
-                            <Loader2 className="animate-spin text-slate-500" size={16} />
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Syncing</span>
-                        </div>
-                    )}
                 </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {platforms.map((platform) => (
                     <PlatformCard
                         key={platform.id}
                         {...platform}
                         accounts={filterAccounts(platform.id)}
-                        onRemove={(accountId) => handleRemoveAccount(platform.id, accountId)}
+                        onDelete={(accountId) => handleDelete(platform.id === 'meta' ? 'facebook' : platform.id, accountId)}
                     />
                 ))}
             </div>
