@@ -192,9 +192,9 @@ class MetaAuth:
 
 class YouTubeAuth:
     def __init__(self):
-        self.client_id = os.getenv("youtube_client_id")
-        self.client_secret = os.getenv("youtube_client_secret")
-        self.redirect_uri = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback")
+        self.client_id = os.getenv("youtube_client_id", os.getenv("GOOGLE_CLIENT_ID"))
+        self.client_secret = os.getenv("youtube_client_secret", os.getenv("GOOGLE_CLIENT_SECRET"))
+        self.redirect_uri = os.getenv("YOUTUBE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback"))
         self.auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         self.token_url = "https://oauth2.googleapis.com/token"
 

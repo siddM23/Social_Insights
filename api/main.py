@@ -145,6 +145,10 @@ class ActivityLogRequest(BaseModel):
     activity_type: str
     details: Optional[Dict[str, Any]] = None
 
+class CustomMetricRequest(BaseModel):
+    start_date: str # YYYY-MM-DD
+    end_date: str # YYYY-MM-DD
+
 @app.get("/")
 def read_root():
     return {"status": "ok", "service": "Social Insights Backend"}
@@ -441,7 +445,130 @@ def delete_integration(platform: str, account_id: str, user_id: str = Depends(ge
     log_user_activity(user_id, "delete_integration", {"platform": platform, "account_id": account_id})
     
     logger.info(f"Deleted {platform} integration: {account_id}")
+    logger.info(f"Deleted {platform} integration: {account_id}")
     return {"message": "Integration deleted"}
+
+@app.post("/metrics/custom_range")
+async def get_custom_range_metrics(req: CustomMetricRequest, user_id: str = Depends(get_current_user)):
+    """
+    Fetch metrics for all user accounts for a custom date range.
+    Returns ad-hoc data structure.
+    """
+    logger.info(f"Fetching custom metrics for {user_id} from {req.start_date} to {req.end_date}")
+    
+    # 1. Get all integrations for user
+    # Note: integrations_db.scan_items() gets ALL items. In real app, we should query by owner_id or filter.
+    # For now, we scan and filter.
+    all_items = integrations_db.scan_items()
+    
+    # DEBUG LOGGING START
+    logger.info(f"Total items in DB: {len(all_items)}")
+    for item in all_items:
+        logger.info(f"Item ID: {item.get('account_id')} | Platform: {item.get('platform')} | Owner: {item.get('owner_id')}")
+    # DEBUG LOGGING END
+
+    # Include items owned by user OR items with no owner (legacy/global)
+    user_integrations = [
+        i for i in all_items 
+        if i.get('owner_id') == user_id or i.get('owner_id') is None
+    ]
+    
+    logger.info(f"Found {len(user_integrations)} integrations for user {user_id}")
+    
+    results = []
+    
+    import datetime
+    
+    # Helper to parse dates to timestamps
+    try:
+        start_dt = datetime.datetime.strptime(req.start_date, "%Y-%m-%d")
+        end_dt = datetime.datetime.strptime(req.end_date, "%Y-%m-%d")
+        # Set end_dt to end of day? 
+        end_dt = end_dt.replace(hour=23, minute=59, second=59)
+        
+        start_ts = int(start_dt.timestamp())
+        end_ts = int(end_dt.timestamp())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    for acc in user_integrations:
+        platform = acc.get('platform')
+        account_id = acc.get('account_id')
+        access_token = acc.get('access_token')
+        
+        # skip if missing key info
+        if not platform or not account_id: 
+            continue
+            
+        logger.info(f"Fetching custom metrics for {platform} account {account_id}")
+        metric_data = None
+        
+        try:
+            if platform == 'instagram':
+                from Sources.instagram import InstagramClient
+                client = InstagramClient(access_token)
+                
+                # Fetch Custom
+                # Note: 'interactions' needs special handling in IG
+                custom_insight = client.get_user_insights(account_id, since=start_ts, until=end_ts)
+                interactions = client.get_media_interactions(account_id, since_ts=start_ts, until_ts=end_ts)
+                custom_insight['interactions'] = interactions
+                metric_data = custom_insight
+
+            elif platform in ['meta', 'facebook']:
+                from Sources.meta import MetaClient
+                client = MetaClient(access_token)
+                metric_data = client.get_page_insights(account_id, since=start_ts, until=end_ts)
+
+            elif platform == 'pinterest':
+                from Sources.pinterest import PinterestClient
+                client = PinterestClient(access_token)
+                metric_data = client.get_analytics(days=0, start_date_str=req.start_date, end_date_str=req.end_date)
+                
+                # Pinterest returns schema: views, clicks, saves, engagements
+                # Map to standard
+                # (function inside sync_pinterest_account does this mapping, logic duplicated for speed here)
+                s = metric_data
+                metric_data = {
+                    'followers_new': 0,
+                    'views_organic': s.get('views', 0),
+                    'views_ads': 0,
+                    'interactions': s.get('engagements', 0),
+                    'profile_visits': s.get('clicks', 0),
+                    'accounts_reached': s.get('views', 0),
+                    'saves': s.get('saves', 0),
+                    'followers_total': s.get('audience', 0) # Fallback
+                }
+
+            elif platform == 'youtube':
+                from Sources.youtube import YouTubeClient
+                client = YouTubeClient(access_token)
+                metric_data = client.get_channel_insights(account_id, start_date=req.start_date, end_date=req.end_date)
+            
+            if metric_data:
+                 logger.info(f"Successfully fetched metrics for {account_id}")
+            else:
+                 logger.warning(f"Fetched None metrics for {account_id}")
+
+        except Exception as e:
+            logger.error(f"Error fetching custom metrics for {platform}/{account_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # metric_data will be None
+        
+        if metric_data:
+            # Construct result item matching dashboard expectations
+            results.append({
+                "accountName": acc.get('account_name', account_id),
+                "platform": platform,
+                "data": {
+                    "custom_period": metric_data,
+                    "followers_total": metric_data.get('followers_total', 0) # Might be 0 if endpoint didn't fetch profile
+                }
+            })
+
+    logger.info(f"Returning {len(results)} custom metric results")
+    return results
 
 # --- Metrics Endpoints ---
 

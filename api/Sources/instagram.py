@@ -90,11 +90,13 @@ class InstagramClient:
                     logger.info(f"Page '{page.get('name')}' (ID: {page.get('id')}) has no connected Instagram Business Account.")
         return accounts
 
-    def get_user_insights(self, ig_user_id: str, period: str = 'day'):
+    def get_user_insights(self, ig_user_id: str, period: str = 'day', since: str = None, until: str = None):
         """
         Get basic user insights (Followers, Reach, Impressions, Profile Views).
         Params:
             period: 'day', 'week', 'days_28'
+            since: UNIX timestamp (Optional)
+            until: UNIX timestamp (Optional)
         """
         url = f"{self.base_url}/{ig_user_id}/insights"
         
@@ -110,14 +112,13 @@ class InstagramClient:
         user_data = user_res.json()
         
         # 2. Get Insights
-        # API Mapping:
-        # 7 days -> period='week' (supported by reach, impressions)
-        # 30 days -> period='days_28' (supported by reach, impressions)
-        
-        metric_param = "impressions,reach,profile_views"
         api_period = period
+        is_custom_range = False
         
-        if period == '7d':
+        if since and until:
+            api_period = 'day' # Force day granularity for custom summation
+            is_custom_range = True
+        elif period == '7d':
              api_period = 'week' # approx
         elif period == '30d':
              api_period = 'days_28' # approx
@@ -158,21 +159,28 @@ class InstagramClient:
         
         # Call 1: Organic Views (Impressions) & Reach
         try:
-            p = 'day'
-            if period == '7d': p = 'week'
-            if period == '30d': p = 'days_28'
+            p = api_period
             
-            res = requests.get(url, params={
+            p_params = {
                 "access_token": self.access_token,
                 "metric": "impressions,reach",
                 "period": p
-            }, timeout=10)
+            }
+            if is_custom_range:
+                p_params["since"] = since
+                p_params["until"] = until
+            
+            res = requests.get(url, params=p_params, timeout=10)
             data = res.json()
             
             if "data" in data:
                 for item in data["data"]:
                     if item["values"]:
-                        val = item["values"][-1]["value"] # Latest window value
+                        if is_custom_range:
+                            val = sum([x["value"] for x in item["values"]])
+                        else:
+                            val = item["values"][-1]["value"] # Latest window value
+                            
                         if item["name"] == "impressions": result["views_organic"] = val
                         if item["name"] == "reach": result["accounts_reached"] = val
         except Exception as e:
@@ -180,25 +188,27 @@ class InstagramClient:
 
         # Call 2: Profile Views (Always 'day', we sum up)
         try:
-            days_to_sum = 1
-            if period == '7d': days_to_sum = 7
-            if period == '30d': days_to_sum = 30
-            
-            # We need slightly more data to sum correctly?
-            # 'period=day' usually returns last couple of days. 
-            # To get 30 days history, we need 'since' and 'until' params potentially.
-            # But standard `/insights` current window usually allows `since` and `until`.
-            
-            import datetime
-            until = datetime.datetime.now()
-            since = until - datetime.timedelta(days=days_to_sum)
+            # Prepare since/until if not custom
+            if not is_custom_range:
+                days_to_sum = 1
+                if period == '7d': days_to_sum = 7
+                if period == '30d': days_to_sum = 30
+                
+                import datetime
+                u = datetime.datetime.now()
+                s = u - datetime.timedelta(days=days_to_sum)
+                pv_until = int(u.timestamp())
+                pv_since = int(s.timestamp())
+            else:
+                pv_until = until
+                pv_since = since
             
             res = requests.get(url, params={
                 "access_token": self.access_token,
                 "metric": "profile_views",
                 "period": "day",
-                "since": int(since.timestamp()),
-                "until": int(until.timestamp())
+                "since": pv_since,
+                "until": pv_until
             }, timeout=10)
             data = res.json()
             
@@ -216,9 +226,9 @@ class InstagramClient:
 
         return result
 
-    def get_media_interactions(self, ig_user_id: str, days: int = 1):
+    def get_media_interactions(self, ig_user_id: str, days: int = 1, since_ts: int = None, until_ts: int = None):
         """
-        Get aggregated interactions (like_count + comments_count) from media in the last N days.
+        Get aggregated interactions (like_count + comments_count) from media in the last N days or custom range.
         """
         url = f"{self.base_url}/{ig_user_id}/media"
         params = {
@@ -234,6 +244,7 @@ class InstagramClient:
             total_interactions = 0
             
             import datetime
+            # Determine cutoff window
             cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
             
             if "data" in data:
@@ -247,7 +258,15 @@ class InstagramClient:
                             ts_str = media["timestamp"].replace("+0000", "") 
                             ts = datetime.datetime.fromisoformat(ts_str)
                             
-                            if ts >= cutoff:
+                            is_in_range = False
+                            if since_ts and until_ts:
+                                # Compare with timestamps
+                                if since_ts <= ts.timestamp() <= until_ts:
+                                    is_in_range = True
+                            elif ts >= cutoff:
+                                is_in_range = True
+                                
+                            if is_in_range:
                                 total_interactions += media.get("like_count", 0)
                                 total_interactions += media.get("comments_count", 0)
                         except:

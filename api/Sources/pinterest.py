@@ -23,12 +23,14 @@ class PinterestClient:
             return None
         return res.json()
 
-    def get_analytics(self, ad_account_id: str = None, days: int = 30):
+    def get_analytics(self, ad_account_id: str = None, days: int = 30, start_date_str: str = None, end_date_str: str = None):
         """
         Get Pinterest Analytics. 
         Tries to use SDK for Ad Account analytics first, falls back to User Account analytics.
         Params:
-            days: Number of days to look back (e.g. 7 or 30)
+            days: Number of days to look back (default 30)
+            start_date_str: 'YYYY-MM-DD' (Optional)
+            end_date_str: 'YYYY-MM-DD' (Optional)
         """
         import datetime
         stats = {
@@ -39,8 +41,15 @@ class PinterestClient:
             "audience": 0
         }
 
-        end_date = datetime.date.today()
-        start_date = end_date - datetime.timedelta(days=days)
+        if end_date_str:
+            end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        else:
+            end_date = datetime.date.today()
+
+        if start_date_str:
+            start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        else:
+            start_date = end_date - datetime.timedelta(days=days)
 
         # 1. Try to discover Ad Accounts (Business Account)
         # Using requests for discovery as SDK discovery method might vary

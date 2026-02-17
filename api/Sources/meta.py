@@ -35,12 +35,14 @@ class MetaClient:
                 })
         return pages
 
-    def get_page_insights(self, page_id: str, page_access_token: str = None, period: str = 'day'):
+    def get_page_insights(self, page_id: str, page_access_token: str = None, period: str = 'day', since: str = None, until: str = None):
         """
         Get Facebook Page insights.
         Metrics: page_impressions, page_post_engagements, page_views_total, page_fan_adds
         Params:
             period: 'day', 'week', 'days_28'
+            since: UNIX timestamp or YYYY-MM-DD (Optional, overrides period logic)
+            until: UNIX timestamp or YYYY-MM-DD (Optional)
         """
         # Use Page Access Token if provided, otherwise use User Access Token (User token usually works if user has permissions)
         token = page_access_token or self.access_token
@@ -74,11 +76,19 @@ class MetaClient:
         if period == '7d': api_period = 'week'
         if period == '30d': api_period = 'days_28'
         
+        # If custom range provided via since/until, FORCE period='day' to sum it up
+        is_custom_range = False
+        if since and until:
+            api_period = 'day'
+            is_custom_range = True
+        
         params = {
             "access_token": token,
             "metric": "page_impressions,page_post_engagements,page_views_total,page_fan_adds",
             "period": api_period
         }
+        if since: params["since"] = since
+        if until: params["until"] = until
         
         insights_res = requests.get(url, params=params, timeout=10)
         insights_data = insights_res.json()
@@ -97,18 +107,22 @@ class MetaClient:
             for item in insights_data["data"]:
                 name = item["name"]
                 if item["values"]:
-                    # For rolling windows (week/days_28), the value is the total for that window ending on 'end_time'.
-                    # We take the latest one.
-                    latest_val = item["values"][-1]["value"]
+                    # For custom range (day), SUM all values. For rolling windows (week/days_28), take latest.
+                    if is_custom_range:
+                        # Sum all 'value' in the list
+                        val = sum([x["value"] for x in item["values"]])
+                    else:
+                         # Default behavior: Latest one
+                        val = item["values"][-1]["value"]
                     
                     if name == "page_impressions":
-                        result["accounts_reached"] = latest_val
-                        result["views_organic"] = latest_val
+                        result["accounts_reached"] = val
+                        result["views_organic"] = val
                     elif name == "page_post_engagements":
-                        result["interactions"] = latest_val
+                        result["interactions"] = val
                     elif name == "page_views_total":
-                        result["profile_visits"] = latest_val
+                        result["profile_visits"] = val
                     elif name == "page_fan_adds":
-                        result["followers_new"] = latest_val
+                        result["followers_new"] = val
                         
         return result

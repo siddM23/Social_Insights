@@ -42,12 +42,14 @@ class YouTubeClient:
                 })
         return channels
 
-    def get_channel_insights(self, channel_id: str, days: int = 30):
+    def get_channel_insights(self, channel_id: str, days: int = 30, start_date: str = None, end_date: str = None):
         """
         Get YouTube Channel insights using YouTube Analytics API.
         Metrics mapped to our standard format.
         Params:
-            days: Number of days to look back (e.g. 7 or 30)
+            days: Number of days to look back (default 30) if start_date/end_date not provided.
+            start_date: 'YYYY-MM-DD'
+            end_date: 'YYYY-MM-DD'
         """
         # 1. Get current stats via Data API (for total followers)
         url = f"{self.base_url}/channels"
@@ -73,8 +75,10 @@ class YouTubeClient:
         # If we ask for 'today', we might get partial or no data for recent days.
         # But for a 30-day window, requesting up to 'today' usually returns sum of available days.
         
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         
         analytics_params = {
             "ids": f"channel=={channel_id}",
