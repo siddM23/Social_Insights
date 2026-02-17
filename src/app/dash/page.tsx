@@ -40,6 +40,12 @@ interface PinterestMetrics {
 
 type SocialMetricData = (InstagramMetrics | MetaMetrics | PinterestMetrics) & { accountName: string };
 
+interface MetricItem {
+    accountName: string;
+    platform: string;
+    data: any;
+}
+
 const SocialMetricRow: React.FC<SocialMetricData> = (props) => {
     const { platform, accountName } = props;
 
@@ -270,10 +276,10 @@ export default function DashPage() {
     });
 
     const groupedMetrics = {
-        instagram: activeMetrics.filter(m => m.platform === 'instagram').map(mapToRowData),
-        meta: activeMetrics.filter(m => ['meta', 'facebook'].includes(m.platform)).map(mapToRowData),
-        pinterest: activeMetrics.filter(m => m.platform === 'pinterest').map(mapToRowData),
-        youtube: activeMetrics.filter(m => m.platform === 'youtube').map(mapToRowData)
+        instagram: activeMetrics.filter((m: MetricItem) => m.platform === 'instagram').map(mapToRowData),
+        meta: activeMetrics.filter((m: MetricItem) => ['meta', 'facebook'].includes(m.platform)).map(mapToRowData),
+        pinterest: activeMetrics.filter((m: MetricItem) => m.platform === 'pinterest').map(mapToRowData),
+        youtube: activeMetrics.filter((m: MetricItem) => m.platform === 'youtube').map(mapToRowData)
     };
 
     const renderTable = (platform: string, data: any[]) => {
