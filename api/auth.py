@@ -5,6 +5,8 @@ from urllib.parse import urlencode
 import logging
 
 logger = logging.getLogger("social_insights.auth")
+yt_logger = logging.getLogger("social_insights.auth.youtube")
+yt_logger.setLevel(logging.DEBUG)
 
 class InstagramAuth:
     def __init__(self):
@@ -192,14 +194,22 @@ class MetaAuth:
 
 class YouTubeAuth:
     def __init__(self):
+        yt_logger.info("Initializing YouTubeAuth")
         self.client_id = os.getenv("youtube_client_id", os.getenv("GOOGLE_CLIENT_ID"))
         self.client_secret = os.getenv("youtube_client_secret", os.getenv("GOOGLE_CLIENT_SECRET"))
         self.redirect_uri = os.getenv("YOUTUBE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback"))
         self.auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         self.token_url = "https://oauth2.googleapis.com/token"
+        
+        if not self.client_id:
+            yt_logger.warning("YouTube client_id is missing (from youtube_client_id or GOOGLE_CLIENT_ID)")
+        if not self.client_secret:
+            yt_logger.warning("YouTube client_secret is missing")
+        yt_logger.debug(f"YouTube Redirect URI: {self.redirect_uri}")
 
     def get_auth_url(self, state: str = None):
         """Build the Google OAuth URL for YouTube"""
+        yt_logger.info(f"Building YouTube auth URL. State: {state}")
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
@@ -210,10 +220,14 @@ class YouTubeAuth:
         }
         if state:
             params["state"] = state
-        return f"{self.auth_url}?{urlencode(params)}"
+        
+        auth_url = f"{self.auth_url}?{urlencode(params)}"
+        yt_logger.debug(f"YouTube Auth URL generated: {auth_url}")
+        return auth_url
 
     def exchange_code_for_token(self, code: str):
         """Exchange the auth code for an access token and refresh token"""
+        yt_logger.info(f"Exchanging YouTube auth code. Code prefix: {code[:10]}...")
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -222,15 +236,24 @@ class YouTubeAuth:
             "redirect_uri": self.redirect_uri
         }
         
+        yt_logger.debug(f"Token exchange request payload: client_id={self.client_id}, redirect_uri={self.redirect_uri}")
+        
         try:
+            yt_logger.info(f"POSTing to {self.token_url}")
             res = requests.post(self.token_url, data=data, timeout=10)
+            yt_logger.info(f"YouTube token exchange response status: {res.status_code}")
             token_data = res.json()
+            if res.status_code != 200:
+                yt_logger.error(f"YouTube token exchange failed. Response: {token_data}")
+            else:
+                yt_logger.debug(f"YouTube token data keys received: {list(token_data.keys())}")
         except Exception as e:
-            logger.error(f"Network error exchanging YouTube code: {e}")
+            yt_logger.error(f"Network error exchanging YouTube code: {e}")
             return None
             
         if "error" in token_data:
-            logger.error(f"YouTube OAuth error: {token_data.get('error_description', token_data.get('error'))}")
+            yt_logger.error(f"YouTube OAuth error: {token_data.get('error_description', token_data.get('error'))}")
             return None
             
+        yt_logger.info("Successfully exchanged YouTube code for tokens")
         return token_data
