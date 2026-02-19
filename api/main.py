@@ -160,7 +160,7 @@ async def auth_instagram_login(user_id: str = Depends(get_current_user)):
     logger.info(f"Instagram login URL requested by user: {user_id}")
     auth_client = InstagramAuth()
     url = auth_client.get_auth_url(state=user_id)
-    return RedirectResponse(url=url)
+    return {"url": url}
 
 @app.get("/auth/instagram/callback")
 async def auth_instagram_callback(code: str, state: Optional[str] = None):
@@ -205,7 +205,7 @@ async def auth_pinterest_login(user_id: str = Depends(get_current_user)):
     logger.info(f"Pinterest login URL requested by user: {user_id}")
     auth_client = PinterestAuth()
     url = auth_client.get_auth_url(state=user_id)
-    return RedirectResponse(url=url)
+    return {"url": url}
 
 @app.get("/auth/pinterest/callback") # Matches user's recent change
 async def auth_pinterest_callback(code: str, state: Optional[str] = None):
@@ -249,7 +249,7 @@ async def auth_meta_login(user_id: str = Depends(get_current_user)):
     logger.info(f"Meta login URL requested by user: {user_id}")
     auth_client = MetaAuth()
     url = auth_client.get_auth_url(state=user_id)
-    return RedirectResponse(url=url)
+    return {"url": url}
 
 @app.get("/auth/meta/callback")
 async def auth_meta_callback(code: str, state: Optional[str] = None):
@@ -300,7 +300,7 @@ async def auth_youtube_login(user_id: str = Depends(get_current_user)):
     logger.info(f"YouTube login URL requested by user: {user_id}")
     auth_client = YouTubeAuth()
     url = auth_client.get_auth_url(state=user_id)
-    return RedirectResponse(url=url)
+    return {"url": url}
 
 @app.get("/auth/youtube/callback")
 async def auth_youtube_callback(code: str, state: Optional[str] = None):

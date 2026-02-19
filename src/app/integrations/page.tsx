@@ -130,17 +130,21 @@ export default function IntegrationsPage() {
     const handleConnect = async (platform: string) => {
         try {
             const res = await authFetch(`${API_URL}/auth/${platform}/login`);
-            // The backend might return a direct redirect or a JSON with URL
-            if (res.redirected) {
-                window.location.href = res.url;
-            } else {
-                const data = await res.json();
-                if (data.url) {
-                    window.location.href = data.url;
-                }
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || `Server returned ${res.status}`);
             }
-        } catch (err) {
-            alert(`Failed to start ${platform} OAuth flow`);
+
+            // The backend returns a JSON with the URL
+            const data = await res.json();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                throw new Error("No URL returned from server");
+            }
+        } catch (err: any) {
+            console.error(`OAuth Error (${platform}):`, err);
+            alert(`Failed to start ${platform} OAuth flow: ${err.message || 'Network error'}`);
         }
     };
 
