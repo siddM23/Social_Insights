@@ -216,7 +216,7 @@ class YouTubeAuth:
             "response_type": "code",
             "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly openid email profile",
             "access_type": "offline",
-            "prompt": "consent"
+            "prompt": "select_account consent"
         }
         if state:
             params["state"] = state
