@@ -60,16 +60,28 @@ class PinterestClient:
                             .get_analytics(
                                 start_date=start_date.strftime('%Y-%m-%d'),
                                 end_date=end_date.strftime('%Y-%m-%d'),
-                                columns=["TOTAL_IMPRESSION", "TOTAL_ENGAGEMENT", "TOTAL_AUDIENCE", "TOTAL_SAVE", "TOTAL_OUTBOUND_CLICK", "TOTAL_PIN_CLICK"],
+                                columns=["TOTAL_IMPRESSION", "TOTAL_ENGAGEMENT", "TOTAL_AUDIENCE_IMPRESSIONS", "TOTAL_SAVE", "TOTAL_OUTBOUND_CLICK", "TOTAL_PIN_CLICK"],
                                 granularity="TOTAL"
                             )
                         )
                         
+                        # Debug: Raw call to verify fields (as requested)
+                        try:
+                            raw_url = f"{self.base_url}/ad_accounts/{target_account_id}/analytics"
+                            params = {
+                                "start_date": start_date.strftime('%Y-%m-%d'),
+                                "end_date": end_date.strftime('%Y-%m-%d'),
+                                "columns": "TOTAL_IMPRESSION,TOTAL_AUDIENCE_IMPRESSIONS,TOTAL_ENGAGEMENT,TOTAL_SAVE,TOTAL_OUTBOUND_CLICK,TOTAL_PIN_CLICK",
+                                "granularity": "TOTAL"
+                            }
+                            r = requests.get(raw_url, headers=self.headers, params=params)
+                            logger.info(f"DEBUG Pinterest Raw Response: {r.json()}")
+                        except: pass
+
                         result = analytics[0] if isinstance(analytics, list) and analytics else analytics
                         
                         def get_val(obj, keys):
                             for k in keys:
-                                # Try exact, upper, lower, and snake_case
                                 for variant in [k, k.upper(), k.lower()]:
                                     if isinstance(obj, dict):
                                         if variant in obj: return obj[variant]
@@ -80,11 +92,11 @@ class PinterestClient:
 
                         stats["views"] = int(get_val(result, ["TOTAL_IMPRESSION", "IMPRESSION"]) or 0)
                         stats["engagements"] = int(get_val(result, ["TOTAL_ENGAGEMENT", "ENGAGEMENT"]) or 0)
-                        stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE", "AUDIENCE", "TOTAL_UNIQUE_USERS"]) or 0)
+                        stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE_IMPRESSIONS", "TOTAL_AUDIENCE", "AUDIENCE_IMPRESSIONS", "AUDIENCE"]) or 0)
                         stats["saves"] = int(get_val(result, ["TOTAL_SAVE", "SAVE"]) or 0)
                         stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK", "PIN_CLICK"]) or 0) + int(get_val(result, ["TOTAL_OUTBOUND_CLICK", "OUTBOUND_CLICK"]) or 0)
                         
-                        if stats["views"] > 0: return stats # Successful ad path
+                        if stats["views"] > 0: return stats
                         
                     except Exception as e:
                         logger.warning(f"SDK Analytics failed: {e}. Falling back.")
