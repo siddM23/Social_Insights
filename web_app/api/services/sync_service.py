@@ -94,7 +94,7 @@ class SyncService:
     async def sync_pinterest_account(self, account_id: str, access_token: str, account_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         from services.pinterest import PinterestClient
         
-        async def fetch_with_refresh(token):
+        def fetch_with_refresh(token):
             client = PinterestClient(token)
             now = datetime.datetime.utcnow().date()
             days = [0, 7, 14, 30, 60]
