@@ -121,7 +121,7 @@ class PinterestClient:
         params = {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
-            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK"
+            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK,AUDIENCE"
         }
         
         res = requests.get(url, headers=self.headers, params=params)
