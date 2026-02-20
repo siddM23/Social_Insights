@@ -87,7 +87,7 @@ export default function DashPage() {
     };
 
     const mapToRowData = (m: any) => {
-        const fields = ['followersNew', 'viewsOrganic', 'viewsAds', 'interactions', 'profileVisits', 'accountsReached', 'saves'];
+        const fields = ['followersNew', 'viewsOrganic', 'viewsAds', 'interactions', 'profileVisits', 'accountsReached', 'saves', 'audience'];
         const map = (p: boolean) => Object.fromEntries(fields.map(f => [f, parseInt(getMetric(m, f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`), p))]));
         return { accountName: m.accountName, platform: m.platform, followersTotal: parseInt(m.data.followers_total) || 0, ...map(false), prevData: { ...map(true), followersTotal: parseInt(getMetric(m, 'followers_total', true)) } };
     };

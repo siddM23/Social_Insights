@@ -34,7 +34,7 @@ export const SocialMetricRow: React.FC<SocialMetricData> = (props) => {
             <td className="py-4 px-6 font-semibold text-slate-900 min-w-[200px] text-xs uppercase tracking-wider flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-600"></span>{accountName}</td>
             <Cell v={p.viewsOrganic || 0} p={prev?.viewsOrganic} c="text-slate-900 text-lg font-black" />
             <Cell v={p.interactions || 0} p={prev?.interactions} c="text-slate-700" />
-            <Cell v={p.followersTotal || 0} p={prev?.followersTotal} c="text-indigo-600" />
+            <Cell v={p.audience || 0} p={prev?.audience} c="text-indigo-600" />
             <Cell v={p.saves || 0} p={prev?.saves} c="text-red-500" />
         </tr>
     );

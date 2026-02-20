@@ -84,19 +84,29 @@ class SyncService:
         if not data or not data.get('period_30d'): return None
 
         def fmt(s):
-            return {'followers_new': 0, 'views_organic': s.get('views', 0), 'views_ads': 0, 'interactions': s.get('engagements', 0),
-                    'profile_visits': s.get('clicks', 0), 'accounts_reached': s.get('views', 0), 'saves': s.get('saves', 0),
-                    'followers_total': s.get('audience', 0)}
+            return {
+                'followers_new': 0, 
+                'views_organic': s.get('views', 0), 
+                'views_ads': 0, 
+                'interactions': s.get('engagements', 0),
+                'profile_visits': s.get('clicks', 0), 
+                'accounts_reached': s.get('views', 0), 
+                'saves': s.get('saves', 0),
+                'audience': s.get('audience', 0)
+            }
 
         profile = data.get('profile') or {}
-        followers = profile.get('follower_count', 0) or profile.get('followerCount', 0) or m30.get('audience', 0)
+        followers = profile.get('follower_count', 0) or profile.get('followerCount', 0)
         
         m30 = data['period_30d']
         raw = {k: fmt(v) for k, v in data.items() if k.startswith('period_')}
         payload = {
             "followers_total": followers,
-            "followers_new": 0, "impressions_total": m30.get('views', 0), "interactions": raw['period_30d']['interactions'],
-            "views": raw['period_30d']['views_organic'], "saves": raw['period_30d']['saves'],
+            "followers_new": 0, 
+            "impressions_total": m30.get('views', 0), 
+            "interactions": raw['period_30d']['interactions'],
+            "views": raw['period_30d']['views_organic'], 
+            "saves": raw['period_30d']['saves'],
             "raw_metrics": raw
         }
         await self.metrics_repo.upsert_daily_metrics('pinterest', account_id.lower(), datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
