@@ -1,0 +1,47 @@
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import Sidebar from "@/components/Sidebar";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Unified Social Media Reporting",
+  description: "Aggregate performance across social media platforms",
+  icons: {
+    icon: [
+      { url: "/cube_logo.png?v=1" },
+      { url: "/cube_logo.png?v=1", media: "(prefers-color-scheme: light)" },
+      { url: "/cube_logo.png?v=1", media: "(prefers-color-scheme: dark)" },
+    ],
+    shortcut: "/cube_logo.png?v=1",
+    apple: "/cube_logo.png?v=1",
+  },
+};
+
+import { AuthProvider } from "@/features/auth/AuthContext";
+import LayoutWrapper from "@/components/LayoutWrapper";
+import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="icon" href="/cube_logo.png?v=1" />
+      </head>
+      <body className={`${inter.className} bg-slate-50`}>
+        <ReactQueryProvider>
+          <AuthProvider>
+            <LayoutWrapper>
+              {children}
+            </LayoutWrapper>
+          </AuthProvider>
+        </ReactQueryProvider>
+      </body>
+    </html>
+  );
+}

@@ -1,8 +1,13 @@
 {
+    "functions": {
+        "web_app/api/index.py": {
+            "runtime": "vercel-python@0.1.1"
+        }
+    },
     "rewrites": [
         {
             "source": "/api/:path*",
-            "destination": "/api/index.py"
+            "destination": "web_app/api/index.py"
         }
     ]
 }
