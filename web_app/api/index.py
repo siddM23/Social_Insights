@@ -1,6 +1,12 @@
 import os
+import sys
 import datetime
 import logging
+from pathlib import Path
+
+# Ensure the api directory is on sys.path (required for Vercel serverless)
+sys.path.insert(0, str(Path(__file__).parent))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
