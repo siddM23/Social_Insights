@@ -87,7 +87,7 @@ class PinterestAuth:
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "scope": "user_accounts:read,pins:read,boards:read"
+            "scope": "user_accounts:read,pins:read,boards:read,ads:read"
         }
         if state:
             params["state"] = state
@@ -117,6 +117,32 @@ class PinterestAuth:
         
         if "error" in token_data:
             logger.error(f"Pinterest Token Error: {token_data.get('error_description', token_data.get('error'))}")
+            return None
+            
+        return token_data
+    async def refresh_token(self, refresh_token: str):
+        """Exchange a refresh token for a new access token"""
+        import base64
+        
+        auth_string = f"{self.client_id}:{self.client_secret}"
+        encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        
+        headers = {
+            "Authorization": f"Basic {encoded_auth}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+        
+        logger.info("Attempting to refresh Pinterest access token")
+        res = requests.post(self.token_url, headers=headers, data=data)
+        token_data = res.json()
+        
+        if "error" in token_data:
+            logger.error(f"Pinterest Token Refresh Error: {token_data.get('error_description', token_data.get('error'))}")
             return None
             
         return token_data

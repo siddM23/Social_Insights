@@ -93,6 +93,7 @@ async def auth_pinterest_callback(code: str, state: Optional[str] = None):
         raise HTTPException(status_code=400, detail="Failed to exchange Pinterest code for token")
     
     access_token = token_data.get("access_token")
+    refresh_token = token_data.get("refresh_token")
     user_id = state or "anonymous"
     
     from services.pinterest import PinterestClient
@@ -108,7 +109,7 @@ async def auth_pinterest_callback(code: str, state: Optional[str] = None):
         platform="pinterest",
         account_id=normalized_id,
         encrypted_access_token=access_token,
-        encrypted_refresh_token=None,
+        encrypted_refresh_token=refresh_token,
         account_name=profile.get("username", normalized_id),
         additional_info={"status": "Active"}
     )

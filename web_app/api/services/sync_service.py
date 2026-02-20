@@ -64,11 +64,37 @@ class SyncService:
         
         await self.metrics_repo.upsert_daily_metrics('instagram', account_id, datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
+    async def _refresh_pinterest_token(self, account: Dict[str, Any]) -> Optional[str]:
+        """Refresh Pinterest token and update repository"""
+        from services.auth import PinterestAuth
+        refresh_token = account.get('encrypted_refresh_token')
+        if not refresh_token:
+            logger.warning(f"No refresh token for Pinterest account {account.get('account_id')}")
+            return None
 
-    async def sync_pinterest_account(self, account_id: str, access_token: str) -> Optional[Dict[str, Any]]:
+        auth = PinterestAuth()
+        new_tokens = await auth.refresh_token(refresh_token)
+        if not new_tokens or 'access_token' not in new_tokens:
+            logger.error(f"Failed to refresh Pinterest token for {account.get('account_id')}")
+            return None
+
+        new_access_token = new_tokens['access_token']
+        # Update repository
+        await self.users_repo.add_integration(
+            user_id=account.get('PK').replace('USER#', ''),
+            platform='pinterest',
+            account_id=account.get('account_id'),
+            encrypted_access_token=new_access_token,
+            encrypted_refresh_token=new_tokens.get('refresh_token') or refresh_token, # Keep old if new not provided
+            account_name=account.get('account_name'),
+            additional_info=account.get('additional_info', {})
+        )
+        return new_access_token
+
+    async def sync_pinterest_account(self, account_id: str, access_token: str, account_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         from services.pinterest import PinterestClient
         
-        def fetch_data(token):
+        async def fetch_with_refresh(token):
             client = PinterestClient(token)
             now = datetime.datetime.utcnow().date()
             days = [0, 7, 14, 30, 60]
@@ -76,12 +102,30 @@ class SyncService:
             
             wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
+                # First attempt
                 res = {f"period_{n}": client.get_analytics(start_date_str=dates[s], end_date_str=dates[e]) for n, s, e in wins}
-                return {**res, "profile": client.get_account_info()}
-            except: return None
+                profile = client.get_account_info()
+                
+                # Check for failure (could be 401)
+                # Note: get_account_info returns None on error
+                if not profile and account_data:
+                    return "REFRESH_NEEDED"
+                    
+                return {**res, "profile": profile}
+            except Exception as e:
+                logger.warning(f"Pinterest fetch error: {e}")
+                return "REFRESH_NEEDED"
 
-        data = await asyncio.to_thread(fetch_data, access_token)
-        if not data or not data.get('period_30d'): return None
+        data = await asyncio.to_thread(fetch_with_refresh, access_token)
+        
+        if data == "REFRESH_NEEDED" and account_data:
+            logger.info(f"Pinterest token likely expired for {account_id}, attempting refresh...")
+            new_token = await self._refresh_pinterest_token(account_data)
+            if new_token:
+                data = await asyncio.to_thread(fetch_with_refresh, new_token)
+        
+        if not data or data == "REFRESH_NEEDED" or not data.get('period_30d'): 
+            return None
 
         def fmt(s):
             return {
@@ -181,7 +225,7 @@ class SyncService:
                     elif platform in ['meta', 'facebook']:
                         await self.sync_meta_account(acc_id, token)
                     elif platform == 'pinterest':
-                        await self.sync_pinterest_account(acc_id, token)
+                        await self.sync_pinterest_account(acc_id, token, account_data=account)
                     elif platform == 'youtube':
                         await self.sync_youtube_account(acc_id, token)
                 except Exception as e:
