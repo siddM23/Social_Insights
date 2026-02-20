@@ -27,19 +27,9 @@ class PinterestClient:
         """
         Get Pinterest Analytics. 
         Tries to use SDK for Ad Account analytics first, falls back to User Account analytics.
-        Params:
-            days: Number of days to look back (default 30)
-            start_date_str: 'YYYY-MM-DD' (Optional)
-            end_date_str: 'YYYY-MM-DD' (Optional)
         """
         import datetime
-        stats = {
-            "views": 0,
-            "clicks": 0,
-            "saves": 0,
-            "engagements": 0,
-            "audience": 0
-        }
+        stats = {"views": 0, "clicks": 0, "saves": 0, "engagements": 0, "audience": 0}
 
         if end_date_str:
             end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
@@ -51,26 +41,20 @@ class PinterestClient:
         else:
             start_date = end_date - datetime.timedelta(days=days)
 
-        # 1. Try to discover Ad Accounts (Business Account)
-        # Using requests for discovery as SDK discovery method might vary
+        # 1. Try Ad Accounts (Advanced Analytics)
         try:
             ad_url = f"{self.base_url}/ad_accounts"
             ad_res = requests.get(ad_url, headers=self.headers)
             
             if ad_res.status_code == 200:
-                ad_data = ad_res.json()
-                items = ad_data.get('items', [])
-                
+                items = ad_res.json().get('items', [])
                 if items:
                     target_account_id = items[0]['id']
-                    
                     try:
                         from pinterest.client import PinterestSDKClient
                         from pinterest.ads.ad_accounts import AdAccount
-                        
                         client = PinterestSDKClient.create_default_client(access_token=self.access_token)
                         
-                        # SDK might require specific string format
                         analytics = (
                             AdAccount(ad_account_id=target_account_id, client=client)
                             .get_analytics(
@@ -81,67 +65,60 @@ class PinterestClient:
                             )
                         )
                         
-                        # Process SDK response
-                        result = analytics
-                        if isinstance(analytics, list) and analytics:
-                            result = analytics[0]
-                            
-                        def get_val(obj, key):
-                            if isinstance(obj, dict):
-                                return obj.get(key, 0)
-                            return getattr(obj, key, 0)
+                        result = analytics[0] if isinstance(analytics, list) and analytics else analytics
+                        
+                        def get_val(obj, keys):
+                            for k in keys:
+                                # Try exact, upper, lower, and snake_case
+                                for variant in [k, k.upper(), k.lower()]:
+                                    if isinstance(obj, dict):
+                                        if variant in obj: return obj[variant]
+                                    else:
+                                        val = getattr(obj, variant, None)
+                                        if val is not None: return val
+                            return 0
 
-                        stats["views"] = int(get_val(result, "TOTAL_IMPRESSION") or 0)
-                        stats["engagements"] = int(get_val(result, "TOTAL_ENGAGEMENT") or 0)
-                        stats["audience"] = int(get_val(result, "TOTAL_AUDIENCE") or 0)
-                        stats["saves"] = int(get_val(result, "TOTAL_SAVE") or 0)
-                        stats["clicks"] = int(get_val(result, "TOTAL_PIN_CLICK") or 0) + int(get_val(result, "TOTAL_OUTBOUND_CLICK") or 0)
+                        stats["views"] = int(get_val(result, ["TOTAL_IMPRESSION", "IMPRESSION"]) or 0)
+                        stats["engagements"] = int(get_val(result, ["TOTAL_ENGAGEMENT", "ENGAGEMENT"]) or 0)
+                        stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE", "AUDIENCE", "TOTAL_UNIQUE_USERS"]) or 0)
+                        stats["saves"] = int(get_val(result, ["TOTAL_SAVE", "SAVE"]) or 0)
+                        stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK", "PIN_CLICK"]) or 0) + int(get_val(result, ["TOTAL_OUTBOUND_CLICK", "OUTBOUND_CLICK"]) or 0)
                         
-                        return stats
+                        if stats["views"] > 0: return stats # Successful ad path
                         
-                    except ImportError:
-                        logger.warning("pinterest-api-sdk not installed or import failed. Falling back to requests.")
                     except Exception as e:
-                        logger.error(f"SDK Analytics failed: {e}. Falling back to User Account analytics.")
+                        logger.warning(f"SDK Analytics failed: {e}. Falling back.")
 
         except Exception as e:
             logger.error(f"Ad Account discovery failed: {e}")
 
         # 2. Fallback: User account analytics (Organic)
         url = f"{self.base_url}/user_account/analytics"
-        
         params = {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
-            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK"
+            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK",
+            "from_at_times": "ALL"
         }
         
         res = requests.get(url, headers=self.headers, params=params)
-        if res.status_code != 200:
-            logger.error(f"Error fetching Pinterest analytics: {res.text}")
-            return stats # Return empty stats
-            
-        data = res.json()
-        
-        # Pinterest V5 returns daily metrics in 'all' -> 'daily_metrics'
-        if "all" in data:
-            all_data = data["all"]
-            
-            # 1. Try to get summary metrics if available
+        if res.status_code == 200:
+            data = res.json()
+            all_data = data.get("all", {})
             summary = all_data.get("summary_metrics", {})
-            if summary:
-                stats["views"] = int(summary.get("IMPRESSION", 0))
-                stats["clicks"] = int(summary.get("PIN_CLICK", 0)) + int(summary.get("OUTBOUND_CLICK", 0))
-                stats["saves"] = int(summary.get("SAVE", 0))
-                stats["engagements"] = int(summary.get("ENGAGEMENT", 0))
-            else:
-                # 2. Sum up daily metrics
-                daily = all_data.get("daily_metrics", [])
-                for day in daily:
-                    metrics = day.get("metrics", {})
-                    stats["views"] += int(metrics.get("IMPRESSION", 0))
-                    stats["clicks"] += int(metrics.get("PIN_CLICK", 0)) + int(metrics.get("OUTBOUND_CLICK", 0))
-                    stats["saves"] += int(metrics.get("SAVE", 0))
-                    stats["engagements"] += int(metrics.get("ENGAGEMENT", 0))
             
+            # Helper to get from summary or daily sum
+            def extract(key):
+                if key in summary: return int(summary[key])
+                return sum(int(day.get("metrics", {}).get(key, 0)) for day in all_data.get("daily_metrics", []))
+
+            stats["views"] = extract("IMPRESSION")
+            stats["clicks"] = extract("PIN_CLICK") + extract("OUTBOUND_CLICK")
+            stats["saves"] = extract("SAVE")
+            stats["engagements"] = extract("ENGAGEMENT")
+            
+            # For organic, Pinterest doesn't always provide Audience in the daily breakdown.
+            # We'll try to get it from the summary if it exists under common names.
+            stats["audience"] = int(summary.get("AUDIENCE") or summary.get("TOTAL_AUDIENCE") or summary.get("UNIQUE_USERS") or 0)
+
         return stats
