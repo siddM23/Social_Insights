@@ -76,34 +76,26 @@ class PinterestClient:
                             .get_analytics(
                                 start_date=start_date.strftime('%Y-%m-%d'),
                                 end_date=end_date.strftime('%Y-%m-%d'),
-                                columns=["IMPRESSION", "ENGAGEMENT", "AUDIENCE", "SAVE", "OUTBOUND_CLICK", "PIN_CLICK"],
+                                columns=["TOTAL_IMPRESSION", "TOTAL_ENGAGEMENT", "TOTAL_AUDIENCE", "TOTAL_SAVE", "TOTAL_OUTBOUND_CLICK", "TOTAL_PIN_CLICK"],
                                 granularity="TOTAL"
                             )
                         )
                         
                         # Process SDK response
-                        # SDK typically returns an object or dict. Assuming dict or object with attributes.
-                        # Based on user snippet, print(analytics) -> likely a response object.
-                        # We need to inspect carefully. Assuming it acts like a dict or we can getattr.
-                        # If it's a list, take the first item.
-                        
-                        # Defensive parsing
                         result = analytics
                         if isinstance(analytics, list) and analytics:
                             result = analytics[0]
                             
-                        # Map fields
-                        # Note: Attributes might be lowercase key properties in SDK objects
                         def get_val(obj, key):
                             if isinstance(obj, dict):
                                 return obj.get(key, 0)
                             return getattr(obj, key, 0)
 
-                        stats["views"] = int(get_val(result, "IMPRESSION") or 0)
-                        stats["engagements"] = int(get_val(result, "ENGAGEMENT") or 0)
-                        stats["audience"] = int(get_val(result, "AUDIENCE") or 0)
-                        stats["saves"] = int(get_val(result, "SAVE") or 0)
-                        stats["clicks"] = int(get_val(result, "PIN_CLICK") or 0) + int(get_val(result, "OUTBOUND_CLICK") or 0)
+                        stats["views"] = int(get_val(result, "TOTAL_IMPRESSION") or 0)
+                        stats["engagements"] = int(get_val(result, "TOTAL_ENGAGEMENT") or 0)
+                        stats["audience"] = int(get_val(result, "TOTAL_AUDIENCE") or 0)
+                        stats["saves"] = int(get_val(result, "TOTAL_SAVE") or 0)
+                        stats["clicks"] = int(get_val(result, "TOTAL_PIN_CLICK") or 0) + int(get_val(result, "TOTAL_OUTBOUND_CLICK") or 0)
                         
                         return stats
                         
@@ -121,7 +113,7 @@ class PinterestClient:
         params = {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
-            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK,AUDIENCE"
+            "columns": "IMPRESSION,PIN_CLICK,SAVE,ENGAGEMENT,OUTBOUND_CLICK"
         }
         
         res = requests.get(url, headers=self.headers, params=params)
