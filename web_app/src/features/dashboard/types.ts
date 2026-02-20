@@ -39,4 +39,4 @@ export interface MetricItem {
     data: any;
 }
 
-export type TimeRange = '7d' | '30d' | '180d' | 'custom';
+export type TimeRange = '7d' | '30d' | 'custom';

@@ -32,7 +32,6 @@ export function DateFilter({ onRangeChange, className }: DateFilterProps) {
         { label: "All Ranges", value: 0 },
         { label: "Last 7 days", value: -7 },
         { label: "Last 30 days", value: -30 },
-        { label: "Last 6 months", value: -180 },
     ]
 
     const handlePresetClick = (value: number, label: string) => {

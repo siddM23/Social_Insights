@@ -30,13 +30,12 @@ class SyncService:
                 except: return None
             
             now = datetime.datetime.utcnow()
-            days = [0, 7, 14, 30, 60, 180, 360]
+            days = [0, 7, 14, 30, 60]
             ts = {d: int((now - datetime.timedelta(days=d)).timestamp()) for d in days}
             
             windows = [
                 ('7d', ts[7], ts[0]), ('7_14', ts[14], ts[7]),
-                ('30d', ts[30], ts[0]), ('30_60', ts[60], ts[30]),
-                ('180d', ts[180], ts[0]), ('180_360', ts[360], ts[180])
+                ('30d', ts[30], ts[0]), ('30_60', ts[60], ts[30])
             ]
             
             try:
@@ -72,10 +71,10 @@ class SyncService:
         def fetch_data(token):
             client = PinterestClient(token)
             now = datetime.datetime.utcnow().date()
-            days = [0, 7, 14, 30, 60, 180, 360]
+            days = [0, 7, 14, 30, 60]
             dates = {d: (now - datetime.timedelta(days=d)).isoformat() for d in days}
             
-            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30), ('180d', 180, 0), ('180_360', 360, 180)]
+            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
                 res = {f"period_{n}": client.get_analytics(start_date_str=dates[s], end_date_str=dates[e]) for n, s, e in wins}
                 return {**res, "profile": client.get_account_info()}
@@ -106,9 +105,9 @@ class SyncService:
         def fetch_data(token):
             client = MetaClient(token)
             now = datetime.datetime.utcnow()
-            days = [0, 7, 14, 30, 60, 180, 360]
+            days = [0, 7, 14, 30, 60]
             ts = {d: int((now - datetime.timedelta(days=d)).timestamp()) for d in days}
-            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30), ('180d', 180, 0), ('180_360', 360, 180)]
+            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
                 return {f"period_{n}": client.get_page_insights(account_id, period='custom', since=ts[s], until=ts[e]) for n, s, e in wins}
             except: return None
@@ -130,9 +129,9 @@ class SyncService:
         def fetch_data(token):
             client = YouTubeClient(token)
             now = datetime.datetime.now()
-            days = [0, 7, 14, 30, 60, 180, 360]
+            days = [0, 7, 14, 30, 60]
             dates = {d: (now - datetime.timedelta(days=d)).strftime("%Y-%m-%d") for d in days}
-            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30), ('180d', 180, 0), ('180_360', 360, 180)]
+            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
                 return {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e]) for n, s, e in wins}
             except: return None

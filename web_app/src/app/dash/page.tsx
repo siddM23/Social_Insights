@@ -70,9 +70,6 @@ export default function DashPage() {
         } else if (label === "Last 30 days") {
             setTimeRange('30d');
             setCustomRange(null);
-        } else if (label === "Last 6 months") {
-            setTimeRange('180d');
-            setCustomRange(null);
         } else if (start && end) {
             setTimeRange('custom');
             setCustomRange({
@@ -85,7 +82,7 @@ export default function DashPage() {
     const getMetric = (m: any, field: string, isPrev = false) => {
         const raw = m.data;
         if (timeRange === 'custom') return (isPrev ? raw.previous_period : raw.custom_period)?.[field] || 0;
-        const key = { '7d': isPrev ? 'period_7_14' : 'period_7d', '30d': isPrev ? 'period_30_60' : 'period_30d', '180d': isPrev ? 'period_180_360' : 'period_180d' }[timeRange as string] || '';
+        const key = { '7d': isPrev ? 'period_7_14' : 'period_7d', '30d': isPrev ? 'period_30_60' : 'period_30d' }[timeRange as string] || '';
         return raw.raw_metrics?.[key]?.[field] || 0;
     };
 
