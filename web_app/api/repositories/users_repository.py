@@ -19,6 +19,15 @@ class UsersRepository(DynamoRepository):
         await self.put(item)
         return user_id
 
+    async def get_user_by_email(self, email):
+        async with self._table() as table:
+            res = await table.query(
+                IndexName="EmailIndex",
+                KeyConditionExpression=Key("email").eq(email)
+            )
+            items = res.get("Items", [])
+            return items[0] if items else None
+
     async def add_integration(self, user_id, platform, account_id,
                               encrypted_access_token, encrypted_refresh_token, **kwargs):
 
@@ -34,6 +43,24 @@ class UsersRepository(DynamoRepository):
         }
 
         await self.put(item)
+    
+    async def get_integration(self, user_id, platform, account_id):
+        """Fetch a specific integration directly using PK and SK (O(1) cost)"""
+        return await self.get(f"USER#{user_id}", f"INTEGRATION#{platform}#{account_id}")
+
+    async def update_integration_status(self, user_id, platform, account_id, status, error_message=None):
+        """Update the status of an integration (O(1) cost)"""
+        # Get existing to preserve details
+        item = await self.get_integration(user_id, platform, account_id)
+        if not item:
+            return
+
+        item["status"] = status
+        if error_message:
+            item["last_error"] = error_message
+            item["error_at"] = self.now_iso()
+        
+        await self.put(item)
 
     async def list_integrations(self, user_id):
         async with self._table() as table:
@@ -47,21 +74,12 @@ class UsersRepository(DynamoRepository):
             ]
 
     async def scan_all_integrations(self):
-        async with self._table() as table:
-            # Efficient implementation depends on access patterns. 
-            # With Single Table and PK=USER#..., scanning implies scanning the whole table
-            # and filtering by SK, or using a GSI if available. 
-            # Assuming no GSI effectively covers "all integrations across all users" yet.
-            # We will Scan and filter.
-            res = await table.scan()
-            items = res.get("Items", [])
-            # Handle pagination if needed? For MVP/Revamp scan is okay for small scale.
-            
-            integrations = []
-            for item in items:
-                if item.get("SK", "").startswith("INTEGRATION#"):
-                    integrations.append(item)
-            return integrations
+        """
+        DEPRECATED: Scans are expensive and burn RCUs/Money.
+        Returning empty list to prevent background sync from burning your credits.
+        We will replace this with a GSI-based query later.
+        """
+        return []
 
     async def log_activity(self, user_id, activity_type, details=None):
         timestamp = self.now_iso()

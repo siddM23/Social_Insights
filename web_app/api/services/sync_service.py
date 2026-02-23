@@ -73,9 +73,20 @@ class SyncService:
             return None
 
         auth = PinterestAuth()
-        new_tokens = await auth.refresh_token(refresh_token)
-        if not new_tokens or 'access_token' not in new_tokens:
-            logger.error(f"Failed to refresh Pinterest token for {account.get('account_id')}")
+        try:
+            new_tokens = await auth.refresh_token(refresh_token)
+            if not new_tokens or 'access_token' not in new_tokens:
+                raise Exception("Invalid refresh response")
+        except Exception as e:
+            logger.error(f"TERMINAL FAILURE: Refresh failed for Pinterest {account.get('account_id')}: {e}")
+            # Mark as broken to stop future RCU burn
+            await self.users_repo.update_integration_status(
+                user_id=account.get('PK').replace('USER#', ''),
+                platform='pinterest',
+                account_id=account.get('account_id'),
+                status='DISCONNECTED',
+                error_message="Refresh token expired or revoked. Please reconnect."
+            )
             return None
 
         new_access_token = new_tokens['access_token']
@@ -92,6 +103,10 @@ class SyncService:
         return new_access_token
 
     async def sync_pinterest_account(self, account_id: str, access_token: str, account_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+        if account_data and account_data.get('status') == 'DISCONNECTED':
+            logger.info(f"Skipping sync for disconnected Pinterest account: {account_id}")
+            return None
+
         from services.pinterest import PinterestClient
         
         def fetch_with_refresh(token):

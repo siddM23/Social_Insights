@@ -43,9 +43,10 @@ export default function IntegrationsPage() {
             })
             .map((a: any) => ({
                 email: a.email,
-                status: a.additional_info?.status || "Active",
+                status: a.status || a.additional_info?.status || "Active",
                 account_id: a.account_id,
-                account_name: a.account_name || a.account_id
+                account_name: a.account_name || a.account_id,
+                last_error: a.last_error
             }));
     };
 

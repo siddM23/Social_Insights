@@ -36,10 +36,20 @@ export const PlatformCard: React.FC<PlatformCardProps> = ({
                                 <div className="flex flex-col gap-0.5">
                                     <span className="text-[14px] font-bold text-slate-900">{acc.account_name}</span>
                                     {acc.email && <span className="text-[11px] text-slate-500 font-medium">{acc.email}</span>}
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 w-fit rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider mt-1">
-                                        <CheckCircle2 size={10} />
+                                    <div className={cn(
+                                        "flex items-center gap-1.5 px-3 py-1 w-fit rounded-full text-[10px] font-bold uppercase tracking-wider mt-1.5 transition-colors",
+                                        acc.status === "DISCONNECTED"
+                                            ? "bg-rose-50 text-rose-600 border border-rose-100"
+                                            : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                    )}>
+                                        {acc.status === "DISCONNECTED" ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
                                         {acc.status || "Active"}
                                     </div>
+                                    {acc.status === "DISCONNECTED" && acc.last_error && (
+                                        <span className="text-[10px] text-rose-500 font-semibold mt-1 max-w-[180px] leading-tight">
+                                            {acc.last_error}
+                                        </span>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => onDelete(acc.account_id)}

@@ -9,6 +9,7 @@ export interface Account {
     additional_info?: {
         status?: string;
     };
+    last_error?: string;
 }
 
 export interface PlatformCardProps {

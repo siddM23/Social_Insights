@@ -53,7 +53,7 @@ class PinterestClient:
                     try:
                         from pinterest.client import PinterestSDKClient
                         from pinterest.ads.ad_accounts import AdAccount
-                        client = PinterestSDKClient.create_default_client(access_token=self.access_token)
+                        client = PinterestSDKClient.create_client_with_token(access_token=self.access_token)
                         
                         analytics = (
                             AdAccount(ad_account_id=target_account_id, client=client)

@@ -20,7 +20,23 @@ tables = [
         ],
         "AttributeDefinitions": [
             {"AttributeName": "PK", "AttributeType": "S"},
-            {"AttributeName": "SK", "AttributeType": "S"}
+            {"AttributeName": "SK", "AttributeType": "S"},
+            {"AttributeName": "email", "AttributeType": "S"}
+        ],
+        "GlobalSecondaryIndexes": [
+            {
+                "IndexName": "EmailIndex",
+                "KeySchema": [
+                    {"AttributeName": "email", "KeyType": "HASH"}
+                ],
+                "Projection": {
+                    "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 5,
+                    "WriteCapacityUnits": 5
+                }
+            }
         ],
         "BillingMode": "PAY_PER_REQUEST"
     },

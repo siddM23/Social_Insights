@@ -17,7 +17,7 @@ sync_service = None
 
 @router.post("/register")
 async def register(req: UserAuthRequest):
-    existing = await users_repo.get(f"USER#{req.user_id}", "PROFILE")
+    existing = await users_repo.get_user_by_email(req.user_id)
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
     
@@ -27,11 +27,13 @@ async def register(req: UserAuthRequest):
 
 @router.post("/login")
 async def login(req: UserAuthRequest):
-    user = await users_repo.get(f"USER#{req.user_id}", "PROFILE")
+    user = await users_repo.get_user_by_email(req.user_id)
     if not user or not verify_password(req.password, user.get("password_hash")):
         raise HTTPException(status_code=401, detail="Incorrect user ID or password")
     
-    access_token = create_access_token(data={"sub": req.user_id})
+    # Extract user_id from PK (USER#uuid)
+    user_id = user["PK"].split("#")[1]
+    access_token = create_access_token(data={"sub": user_id})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/auth/me")
