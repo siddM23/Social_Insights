@@ -26,6 +26,8 @@ export interface PinterestMetrics {
     interactions: number;
     followersTotal: number;
     saves: number;
+    audience: number;
+    outboundClicks: number;
 }
 
 export interface YoutubeMetrics {

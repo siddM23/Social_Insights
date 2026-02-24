@@ -151,7 +151,8 @@ class SyncService:
                 'profile_visits': s.get('clicks', 0), 
                 'accounts_reached': s.get('views', 0), 
                 'saves': s.get('saves', 0),
-                'audience': s.get('audience', 0)
+                'audience': s.get('audience', 0),
+                'outbound_clicks': s.get('audience', 0)
             }
 
         profile = data.get('profile') or {}
@@ -166,6 +167,7 @@ class SyncService:
             "interactions": raw['period_30d']['interactions'],
             "views": raw['period_30d']['views_organic'], 
             "saves": raw['period_30d']['saves'],
+            "outbound_clicks": raw['period_30d']['outbound_clicks'],
             "raw_metrics": raw
         }
         await self.metrics_repo.upsert_daily_metrics('pinterest', account_id.lower(), datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)

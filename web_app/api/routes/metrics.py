@@ -59,7 +59,7 @@ async def get_custom_range_metrics(req: CustomMetricRequest, user_id: str = Depe
                     v = c.get_analytics(start_date_str=s, end_date_str=e)
                     return {'followers_new': 0, 'views_organic': v.get('views', 0), 'views_ads': 0, 'interactions': v.get('engagements', 0),
                             'profile_visits': v.get('clicks', 0), 'accounts_reached': v.get('views', 0), 'saves': v.get('saves', 0), 
-                            'followers_total': f_total, 'audience': v.get('audience', 0)}
+                            'followers_total': f_total, 'audience': v.get('audience', 0), 'outbound_clicks': v.get('audience', 0)}
                 m_curr, m_prev = get_p(req.start_date, req.end_date), get_p(prev_str[0], prev_str[1])
 
             elif platform == 'youtube':
