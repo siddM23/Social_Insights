@@ -42,13 +42,13 @@ async def check_auth(user_id: str = Depends(get_current_user)):
 
 # --- OAuth Endpoints ---
 
-@router.get("/auth/meta/login")
+@router.get("/auth/instagram/login")
 async def auth_instagram_login(user_id: str = Depends(get_current_user)):
     auth_client = InstagramAuth()
     url = auth_client.get_auth_url(state=user_id)
     return {"url": url}
 
-@router.get("/auth/meta/callback")
+  
 async def auth_instagram_callback(code: str, state: Optional[str] = None):
     auth_client = InstagramAuth()
     token_data = auth_client.exchange_code_for_token(code)
