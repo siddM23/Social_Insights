@@ -104,7 +104,17 @@ class PinterestClient:
             summary = all_data.get("summary_metrics", {})
             
             def extract(key):
-                return int(summary.get(key, 0))
+                # Try to sum daily metrics as it is more reliable for custom/short windows
+                daily = all_data.get("daily_metrics", [])
+                if daily:
+                    try:
+                        return int(sum(float(day.get("metrics", {}).get(key, 0)) for day in daily))
+                    except: pass
+                # Fallback to summary
+                try:
+                    return int(float(summary.get(key, 0)))
+                except:
+                    return 0
 
             stats["views"] = extract("IMPRESSION")
             stats["clicks"] = extract("PIN_CLICK") + extract("OUTBOUND_CLICK")
