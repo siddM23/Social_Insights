@@ -28,9 +28,19 @@ export interface PinterestMetrics {
     saves: number;
 }
 
-export type SocialMetricData = (InstagramMetrics | MetaMetrics | PinterestMetrics) & {
+export interface YoutubeMetrics {
+    platform: 'youtube';
+    followersTotal: number;
+    followersNew: number;
+    viewsOrganic: number;
+    viewsAds: number;
+    interactions: number;
+    accountsReached: number;
+}
+
+export type SocialMetricData = (InstagramMetrics | MetaMetrics | PinterestMetrics | YoutubeMetrics) & {
     accountName: string,
-    prevData?: Partial<InstagramMetrics | MetaMetrics | PinterestMetrics>
+    prevData?: Partial<InstagramMetrics | MetaMetrics | PinterestMetrics | YoutubeMetrics>
 };
 
 export interface MetricItem {

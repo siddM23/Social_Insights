@@ -64,7 +64,9 @@ export const SocialMetricRow: React.FC<SocialMetricData> = (props) => {
                 </div>
             </td>
             <Cell v={p.interactions} p={prev?.interactions} c="text-slate-700" />
-            <Cell v={p.profileVisits} p={prev?.profileVisits} c="text-slate-700" />
+            {platform !== 'youtube' && (
+                <Cell v={p.profileVisits} p={prev?.profileVisits} c="text-slate-700" />
+            )}
             <Cell v={p.accountsReached} p={prev?.accountsReached} c="text-slate-900 text-lg" />
         </tr>
     );

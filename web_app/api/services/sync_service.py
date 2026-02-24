@@ -222,7 +222,7 @@ class SyncService:
         m30 = metrics['period_30d']
         payload = {
             "followers_total": m30.get("followers_total", 0), "followers_new": m30.get("followers_new", 0),
-            "impressions_total": 0, "interactions": m30.get("interactions", 0),
+            "impressions_total": m30.get("views_total", 0), "interactions": m30.get("interactions", 0),
             "views": m30.get("views_organic", 0) + m30.get("views_ads", 0), "watch_time_hours": m30.get("watch_time_hours", 0.0),
             "raw_metrics": metrics
         }

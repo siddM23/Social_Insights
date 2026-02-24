@@ -16,7 +16,7 @@ class MetricRequest(BaseModel):
     views_organic: int
     views_ads: int
     interactions: int
-    profile_visits: int
+    profile_visits: Optional[int] = 0
     accounts_reached: int
 
 class UserAuthRequest(BaseModel):

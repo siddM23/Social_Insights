@@ -138,7 +138,9 @@ export default function DashPage() {
                                             Views
                                         </th>
                                         <th rowSpan={2} className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Interactions</th>
-                                        <th rowSpan={2} className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Profile Visits</th>
+                                        {platform !== 'youtube' && (
+                                            <th rowSpan={2} className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Profile Visits</th>
+                                        )}
                                         <th rowSpan={2} className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Accounts Reached</th>
                                     </tr>
                                     <tr className="bg-slate-50 border-b border-slate-100/50">
