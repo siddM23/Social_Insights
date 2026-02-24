@@ -233,28 +233,48 @@ class SyncService:
 
     async def run_full_sync(self):
         logger.info("Starting full background sync...")
+        success_count = 0
+        fail_count = 0
+        
         try:
             integrations = await self.users_repo.scan_all_integrations()
-            for account in integrations:
+            total = len(integrations)
+            logger.info(f"Found {total} integrations to synchronize.")
+            
+            for i, account in enumerate(integrations, 1):
                 platform = account.get('platform')
                 acc_id = account.get('account_id')
                 token = account.get('encrypted_access_token')
                 
                 if not platform or not acc_id or not token:
+                    logger.warning(f"[{i}/{total}] Skipping invalid integration: Platform={platform}, ID={acc_id}")
                     continue
 
+                logger.info(f"[{i}/{total}] Syncing {platform.upper()} account: {acc_id}")
                 try:
+                    res = None
                     if platform == 'instagram':
-                        await self.sync_instagram_account(acc_id, token)
+                        res = await self.sync_instagram_account(acc_id, token)
                     elif platform in ['meta', 'facebook']:
-                        await self.sync_meta_account(acc_id, token)
+                        res = await self.sync_meta_account(acc_id, token)
                     elif platform == 'pinterest':
-                        await self.sync_pinterest_account(acc_id, token, account_data=account)
+                        res = await self.sync_pinterest_account(acc_id, token, account_data=account)
                     elif platform == 'youtube':
                         co_id = account.get('additional_info', {}).get('content_owner_id')
-                        await self.sync_youtube_account(acc_id, token, content_owner_id=co_id)
+                        res = await self.sync_youtube_account(acc_id, token, content_owner_id=co_id)
+                    
+                    if res:
+                        success_count += 1
+                        logger.info(f"[{i}/{total}] Successfully synced {platform.upper()} account: {acc_id}")
+                    else:
+                        fail_count += 1
+                        logger.warning(f"[{i}/{total}] Sync returned no data for {platform.upper()} account: {acc_id}")
+                        
                 except Exception as e:
-                    logger.error(f"Background sync failed for {acc_id}: {e}")
+                    fail_count += 1
+                    logger.error(f"[{i}/{total}] Background sync failed for {acc_id}: {e}")
+                    
         except Exception as e:
             logger.error(f"Full background sync critical error: {e}")
-        logger.info("Full background sync complete.")
+            
+        logger.info(f"Full background sync complete. Summary: {success_count} succeeded, {fail_count} failed, {success_count + fail_count} total processed.")
