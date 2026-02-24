@@ -124,7 +124,7 @@ export default function DashPage() {
                                     <th className="py-6 px-6 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Account</th>
                                     <th className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Impressions</th>
                                     <th className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Engagement</th>
-                                    <th className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Audience</th>
+                                    <th className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100">Outbound Clicks</th>
                                     <th className="py-6 px-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Saves</th>
                                 </tr>
                             ) : (

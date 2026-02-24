@@ -76,9 +76,9 @@ class PinterestClient:
 
                             stats["views"] = int(get_val(result, ["TOTAL_IMPRESSION"]) or 0)
                             stats["engagements"] = int(get_val(result, ["TOTAL_ENGAGEMENT"]) or 0)
-                            stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE"]) or 0)
+                            stats["audience"] = int(get_val(result, ["TOTAL_OUTBOUND_CLICK"]) or 0)
                             stats["saves"] = int(get_val(result, ["TOTAL_SAVE"]) or 0)
-                            stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK"]) or 0) + int(get_val(result, ["TOTAL_OUTBOUND_CLICK"]) or 0)
+                            stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK"]) or 0) + stats["audience"]
                             
                             if stats["views"] > 0:
                                 return stats
@@ -111,9 +111,8 @@ class PinterestClient:
             stats["saves"] = extract("SAVE")
             stats["engagements"] = extract("ENGAGEMENT")
             
-            # Note: Pinterest Organic API almost NEVER provides 'Audience' (Unique Users).
-            # It only provides Impressions.
-            stats["audience"] = 0 
-            logger.info(f"Pinterest Organic Sync complete. Views: {stats['views']}")
+            # Note: We map Outbound Clicks to 'Audience' for organic Pinterest as unique reach is unavailable.
+            stats["audience"] = extract("OUTBOUND_CLICK")
+            logger.info(f"Pinterest Organic Sync complete. Views: {stats['views']}, Outbound Clicks: {stats['audience']}")
 
         return stats
