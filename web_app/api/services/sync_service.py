@@ -197,20 +197,27 @@ class SyncService:
         await self.metrics_repo.upsert_daily_metrics('facebook', account_id.lower(), datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
 
-    async def sync_youtube_account(self, account_id: str, access_token: str) -> Optional[Dict[str, Any]]:
+    async def sync_youtube_account(self, account_id: str, access_token: str, content_owner_id: str = None) -> Optional[Dict[str, Any]]:
         from services.youtube import YouTubeClient
-        def fetch_data(token):
+        logger.info(f"Syncing YouTube account: {account_id} (CO: {content_owner_id})")
+        def fetch_data(token, co_id):
             client = YouTubeClient(token)
             now = datetime.datetime.now()
             days = [0, 7, 14, 30, 60]
             dates = {d: (now - datetime.timedelta(days=d)).strftime("%Y-%m-%d") for d in days}
             wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
-                return {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e]) for n, s, e in wins}
-            except: return None
+                res = {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e], content_owner_id=co_id) for n, s, e in wins}
+                logger.debug(f"Fetched YouTube data for {account_id}")
+                return res
+            except Exception as e:
+                logger.error(f"Error fetching YouTube data in thread: {e}")
+                return None
 
-        metrics = await asyncio.to_thread(fetch_data, access_token)
-        if not metrics or not metrics.get('period_30d'): return None
+        metrics = await asyncio.to_thread(fetch_data, access_token, content_owner_id)
+        if not metrics or not metrics.get('period_30d'):
+            logger.warning(f"No metrics data found for YouTube account {account_id}")
+            return None
 
         m30 = metrics['period_30d']
         payload = {
@@ -219,6 +226,8 @@ class SyncService:
             "views": m30.get("views_organic", 0) + m30.get("views_ads", 0), "watch_time_hours": m30.get("watch_time_hours", 0.0),
             "raw_metrics": metrics
         }
+        
+        logger.info(f"Upserting YouTube metrics for {account_id}")
         await self.metrics_repo.upsert_daily_metrics('youtube', account_id, datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
 
@@ -242,7 +251,8 @@ class SyncService:
                     elif platform == 'pinterest':
                         await self.sync_pinterest_account(acc_id, token, account_data=account)
                     elif platform == 'youtube':
-                        await self.sync_youtube_account(acc_id, token)
+                        co_id = account.get('additional_info', {}).get('content_owner_id')
+                        await self.sync_youtube_account(acc_id, token, content_owner_id=co_id)
                 except Exception as e:
                     logger.error(f"Background sync failed for {acc_id}: {e}")
         except Exception as e:

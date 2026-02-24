@@ -179,23 +179,46 @@ async def auth_youtube_callback(code: str, state: Optional[str] = None):
     
     from services.youtube import YouTubeClient
     client = YouTubeClient(access_token)
-    channels = client.get_channels()
+    
+    logger.info(f"Fetching YouTube channels for user {user_id}")
+    try:
+        channels = client.get_channels()
+        logger.info(f"Found {len(channels)} YouTube channels")
+    except Exception as e:
+        logger.error(f"Exception during get_channels: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching YouTube channels: {str(e)}")
     
     if not channels:
+        logger.warning(f"No YouTube channels found for user {user_id}")
         return RedirectResponse(url=f"{FRONTEND_URL}/integrations?status=error&message=no_youtube_channels")
 
     for channel in channels:
         normalized_id = channel["account_id"]
-        await users_repo.add_integration(
-            user_id=user_id,
-            platform="youtube",
-            account_id=normalized_id,
-            encrypted_access_token=access_token,
-            encrypted_refresh_token=refresh_token,
-            account_name=channel["name"],
-            additional_info={"status": "Active", "snippet": channel.get("snippet")}
-        )
-        await sync_service.sync_youtube_account(normalized_id, access_token)
+        co_id = channel.get("content_owner_id")
+        logger.info(f"Adding YouTube integration for channel {normalized_id} ({channel['name']}) (CO: {co_id})")
+        try:
+            await users_repo.add_integration(
+                user_id=user_id,
+                platform="youtube",
+                account_id=normalized_id,
+                encrypted_access_token=access_token,
+                encrypted_refresh_token=refresh_token,
+                account_name=channel["name"],
+                additional_info={"status": "Active", "snippet": channel.get("snippet"), "content_owner_id": co_id}
+            )
+            logger.info(f"Successfully added integration for {normalized_id}")
+        except Exception as e:
+            logger.error(f"Error adding integration to DB: {e}")
+            continue # Try next channel if one fails
+
+        logger.info(f"Starting initial sync for YouTube channel {normalized_id}")
+        try:
+            sync_result = await sync_service.sync_youtube_account(normalized_id, access_token, content_owner_id=co_id)
+            logger.info(f"Sync complete for {normalized_id}. Result: {'Success' if sync_result else 'Failed/No Data'}")
+        except Exception as e:
+            logger.error(f"Error during sync_youtube_account: {e}")
+            # Don't fail the whole request if sync fails
+
         await users_repo.log_activity(user_id, "add_integration", {"platform": "youtube", "account_id": normalized_id})
     
     return RedirectResponse(url=f"{FRONTEND_URL}/integrations?status=success&platform=youtube&count={len(channels)}")
