@@ -26,7 +26,7 @@ class PinterestClient:
     def get_analytics(self, ad_account_id: str = None, days: int = 30, start_date_str: str = None, end_date_str: str = None):
         """
         Get Pinterest Analytics. 
-        Tries to use SDK for Ad Account analytics first, falls back to User Account analytics.
+        Tries to use Ad Account analytics (which includes Audience/Uniques) first.
         """
         import datetime
         stats = {"views": 0, "clicks": 0, "saves": 0, "engagements": 0, "audience": 0}
@@ -41,7 +41,7 @@ class PinterestClient:
         else:
             start_date = end_date - datetime.timedelta(days=days)
 
-        # 1. Try Ad Accounts (Advanced Analytics)
+        # 1. Try Ad Accounts (Required for 'Total Audience' / Unique Viewers)
         try:
             ad_url = f"{self.base_url}/ad_accounts"
             ad_res = requests.get(ad_url, headers=self.headers)
@@ -50,61 +50,45 @@ class PinterestClient:
                 items = ad_res.json().get('items', [])
                 if items:
                     target_account_id = items[0]['id']
+                    logger.info(f"Found Pinterest Ad Account: {target_account_id}. Fetching advanced metrics...")
+                    
                     try:
-                        from pinterest.client import PinterestSDKClient
-                        from pinterest.ads.ad_accounts import AdAccount
-                        client = PinterestSDKClient.create_client_with_token(access_token=self.access_token)
-                        
-                        analytics = (
-                            AdAccount(ad_account_id=target_account_id, client=client)
-                            .get_analytics(
-                                start_date=start_date.strftime('%Y-%m-%d'),
-                                end_date=end_date.strftime('%Y-%m-%d'),
-                                columns=["TOTAL_IMPRESSION", "TOTAL_ENGAGEMENT", "TOTAL_AUDIENCE_IMPRESSIONS", "TOTAL_SAVE", "TOTAL_OUTBOUND_CLICK", "TOTAL_PIN_CLICK"],
-                                granularity="TOTAL"
-                            )
-                        )
-                        
-                        # Debug: Raw call to verify fields (as requested)
-                        try:
-                            raw_url = f"{self.base_url}/ad_accounts/{target_account_id}/analytics"
-                            params = {
-                                "start_date": start_date.strftime('%Y-%m-%d'),
-                                "end_date": end_date.strftime('%Y-%m-%d'),
-                                "columns": "TOTAL_IMPRESSION,TOTAL_AUDIENCE_IMPRESSIONS,TOTAL_ENGAGEMENT,TOTAL_SAVE,TOTAL_OUTBOUND_CLICK,TOTAL_PIN_CLICK",
-                                "granularity": "TOTAL"
-                            }
-                            r = requests.get(raw_url, headers=self.headers, params=params)
-                            logger.info(f"DEBUG Pinterest Raw Response: {r.json()}")
-                        except: pass
+                        # Direct HTTP call for more control over columns
+                        raw_url = f"{self.base_url}/ad_accounts/{target_account_id}/analytics"
+                        params = {
+                            "start_date": start_date.strftime('%Y-%m-%d'),
+                            "end_date": end_date.strftime('%Y-%m-%d'),
+                            "columns": "TOTAL_IMPRESSION,TOTAL_ENGAGEMENT,TOTAL_SAVE,TOTAL_PIN_CLICK,TOTAL_OUTBOUND_CLICK,TOTAL_AUDIENCE",
+                            "granularity": "TOTAL"
+                        }
+                        r = requests.get(raw_url, headers=self.headers, params=params)
+                        if r.status_code == 200:
+                            data = r.json()
+                            logger.debug(f"Pinterest Ad Analytics Data: {data}")
+                            
+                            # Result is often a dictionary or a list of one item
+                            result = data[0] if isinstance(data, list) and data else data
+                            
+                            def get_val(obj, keys):
+                                for k in keys:
+                                    if k in obj: return obj[k]
+                                return 0
 
-                        result = analytics[0] if isinstance(analytics, list) and analytics else analytics
-                        
-                        def get_val(obj, keys):
-                            for k in keys:
-                                for variant in [k, k.upper(), k.lower()]:
-                                    if isinstance(obj, dict):
-                                        if variant in obj: return obj[variant]
-                                    else:
-                                        val = getattr(obj, variant, None)
-                                        if val is not None: return val
-                            return 0
-
-                        stats["views"] = int(get_val(result, ["TOTAL_IMPRESSION", "IMPRESSION"]) or 0)
-                        stats["engagements"] = int(get_val(result, ["TOTAL_ENGAGEMENT", "ENGAGEMENT"]) or 0)
-                        stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE_IMPRESSIONS", "TOTAL_AUDIENCE", "AUDIENCE_IMPRESSIONS", "AUDIENCE"]) or 0)
-                        stats["saves"] = int(get_val(result, ["TOTAL_SAVE", "SAVE"]) or 0)
-                        stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK", "PIN_CLICK"]) or 0) + int(get_val(result, ["TOTAL_OUTBOUND_CLICK", "OUTBOUND_CLICK"]) or 0)
-                        
-                        if stats["views"] > 0: return stats
-                        
+                            stats["views"] = int(get_val(result, ["TOTAL_IMPRESSION"]) or 0)
+                            stats["engagements"] = int(get_val(result, ["TOTAL_ENGAGEMENT"]) or 0)
+                            stats["audience"] = int(get_val(result, ["TOTAL_AUDIENCE"]) or 0)
+                            stats["saves"] = int(get_val(result, ["TOTAL_SAVE"]) or 0)
+                            stats["clicks"] = int(get_val(result, ["TOTAL_PIN_CLICK"]) or 0) + int(get_val(result, ["TOTAL_OUTBOUND_CLICK"]) or 0)
+                            
+                            if stats["views"] > 0:
+                                return stats
                     except Exception as e:
-                        logger.warning(f"SDK Analytics failed: {e}. Falling back.")
-
+                        logger.warning(f"Pinterest Ad analytics call failed: {e}")
         except Exception as e:
-            logger.error(f"Ad Account discovery failed: {e}")
+            logger.error(f"Pinterest Ad Account discovery failed: {e}")
 
-        # 2. Fallback: User account analytics (Organic)
+        # 2. Fallback: User account analytics (Organic - Audience metric is often omitted here by Pinterest)
+        logger.info("Falling back to Pinterest User (Organic) analytics...")
         url = f"{self.base_url}/user_account/analytics"
         params = {
             "start_date": start_date.isoformat(),
@@ -119,18 +103,17 @@ class PinterestClient:
             all_data = data.get("all", {})
             summary = all_data.get("summary_metrics", {})
             
-            # Helper to get from summary or daily sum
             def extract(key):
-                if key in summary: return int(summary[key])
-                return sum(int(day.get("metrics", {}).get(key, 0)) for day in all_data.get("daily_metrics", []))
+                return int(summary.get(key, 0))
 
             stats["views"] = extract("IMPRESSION")
             stats["clicks"] = extract("PIN_CLICK") + extract("OUTBOUND_CLICK")
             stats["saves"] = extract("SAVE")
             stats["engagements"] = extract("ENGAGEMENT")
             
-            # For organic, Pinterest doesn't always provide Audience in the daily breakdown.
-            # We'll try to get it from the summary if it exists under common names.
-            stats["audience"] = int(summary.get("AUDIENCE") or summary.get("TOTAL_AUDIENCE") or summary.get("UNIQUE_USERS") or 0)
+            # Note: Pinterest Organic API almost NEVER provides 'Audience' (Unique Users).
+            # It only provides Impressions.
+            stats["audience"] = 0 
+            logger.info(f"Pinterest Organic Sync complete. Views: {stats['views']}")
 
         return stats
