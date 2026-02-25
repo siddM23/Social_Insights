@@ -1,6 +1,6 @@
 # Social Insights Dashboard
 
-This project is a dashboard for tracking social media metrics (Instagram, Pinterest, Meta, YouTube).
+This is a dashboard for tracking social media metrics (Instagram, Pinterest, Meta, YouTube).
 
 ## Project Structure (Monorepo)
 
