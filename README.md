@@ -60,15 +60,5 @@ You can also run everything using Docker Compose:
 docker-compose up --build
 ```
 
-## Deployment on Vercel
-
-This project is configured for a unified Vercel deployment.
-
-1.  **Push to GitHub**.
-2.  **Import Project in Vercel**.
-3.  **Vercel Settings**:
-    - **Framework Preset**: Next.js.
-    - **Root Directory**: `./`.
-4.  **Environment Variables**: Add all keys found in `.env.example` to Vercel.
 
 Vercel will automatically route `/api/*` to the Python backend in `web_app/api/index.py`.
