@@ -32,7 +32,9 @@ class YouTubeClient:
             res = requests.get(url, params=params, timeout=10)
             data = res.json()
             if "items" in data:
+                logger.info(f"YouTube mine=true returned {len(data['items'])} items")
                 for item in data["items"]:
+                    logger.info(f"Found channel: {item['id']} - {item['snippet']['title']}")
                     channels.append({
                         "account_id": item["id"],
                         "name": item["snippet"]["title"],
@@ -40,8 +42,11 @@ class YouTubeClient:
                         "snippet": item["snippet"],
                         "statistics": item["statistics"]
                     })
+            else:
+                logger.warning(f"YouTube mine=true returned no items. Response: {data}")
         except Exception as e:
             logger.error(f"Error fetching primary YouTube Channels: {e}")
+
 
         # 2. Fetch channels managed via Content Owner (CMS)
         # This is what a "Manager Account" (CMS) would use to see child channels.

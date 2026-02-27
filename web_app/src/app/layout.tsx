@@ -6,7 +6,7 @@ import Sidebar from "@/components/Sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Unified Social Media Reporting",
+  title: "Social Insights",
   description: "Aggregate performance across social media platforms",
   icons: {
     icon: [

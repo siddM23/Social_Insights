@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -89,15 +90,23 @@ export default function IntegrationsPage() {
         <div className="p-8">
             <div className="mb-12 flex justify-between items-end">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Integrations</h1>
-                    <div className="flex items-center gap-4">
-                        <p className="text-slate-500">Manage your connected social platforms</p>
-                        {isLoading && (
-                            <>
-                                <div className="w-1 h-1 rounded-full bg-slate-200" />
-                                <Loader2 className="animate-spin text-slate-400" size={16} />
-                            </>
-                        )}
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Social Insights</h1>
+                    <div className="flex flex-col gap-2 max-w-2xl">
+                        <p className="text-slate-500">
+                            Social Insights is a unified reporting tool that allows you to connect and aggregate performance
+                            metrics across your social media platforms into a single, intuitive dashboard.
+                        </p>
+                        <div className="flex items-center gap-4">
+                            <Link href="/privacy" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                                Privacy Policy
+                            </Link>
+                            {isLoading && (
+                                <>
+                                    <div className="w-1 h-1 rounded-full bg-slate-200" />
+                                    <Loader2 className="animate-spin text-slate-400" size={16} />
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

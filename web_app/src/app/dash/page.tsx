@@ -110,11 +110,12 @@ export default function DashPage() {
                         "w-1 h-6 rounded-full",
                         platform === 'instagram' ? "bg-pink-500" : platform === 'meta' ? "bg-blue-600" : "bg-red-600"
                     )} />
-                    <h2 className="text-xl font-bold text-slate-900">
-                        {platform === 'instagram' ? 'Instagram' : platform === 'meta' ? 'Meta' : 'Pinterest'}
+                    <h2 className="text-xl font-bold text-slate-900 capitalize">
+                        {platform}
                     </h2>
                     <span className="bg-slate-100 text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">{data.length} Accounts</span>
                 </div>
+
 
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1000px]">
