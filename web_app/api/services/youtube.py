@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 logger = logging.getLogger("social_insights.youtube")
 
@@ -50,7 +51,16 @@ class YouTubeClient:
             co_url = "https://www.googleapis.com/youtube/v3/contentOwners"
             co_params = {"mine": "true", "access_token": self.access_token}
             co_res = requests.get(co_url, params=co_params, timeout=10)
-            co_data = co_res.json()
+            
+            if co_res.status_code == 200:
+                try:
+                    co_data = co_res.json()
+                except ValueError:
+                    logger.error(f"Failed to decode JSON from Content Owners API. Response: {co_res.text[:100]}")
+                    co_data = {}
+            else:
+                logger.debug(f"Content Owners API returned status {co_res.status_code}")
+                co_data = {}
             
             if "items" in co_data:
                 for co in co_data["items"]:
@@ -66,20 +76,26 @@ class YouTubeClient:
                         "access_token": self.access_token
                     }
                     m_res = requests.get(m_url, params=m_params, timeout=10)
-                    m_data = m_res.json()
                     
-                    if "items" in m_data:
-                        for item in m_data["items"]:
-                            # Prevent duplicates if a channel is also in 'mine=true'
-                            if not any(c["account_id"] == item["id"] for c in channels):
-                                channels.append({
-                                    "account_id": item["id"],
-                                    "name": item["snippet"]["title"],
-                                    "access_token": self.access_token,
-                                    "content_owner_id": co_id,
-                                    "snippet": item["snippet"],
-                                    "statistics": item["statistics"]
-                                })
+                    if m_res.status_code == 200:
+                        try:
+                            m_data = m_res.json()
+                        except ValueError:
+                            logger.error(f"Failed to decode JSON from managed channels API for CO {co_id}")
+                            continue
+                        
+                        if "items" in m_data:
+                            for item in m_data["items"]:
+                                # Prevent duplicates if a channel is also in 'mine=true'
+                                if not any(c["account_id"] == item["id"] for c in channels):
+                                    channels.append({
+                                        "account_id": item["id"],
+                                        "name": item["snippet"]["title"],
+                                        "access_token": self.access_token,
+                                        "content_owner_id": co_id,
+                                        "snippet": item["snippet"],
+                                        "statistics": item["statistics"]
+                                    })
             elif "error" in co_data and co_data["error"].get("code") != 403:
                 # 403 usually means the user is just not a Content Owner, which is normal
                 logger.debug(f"Content Owners API returned non-403 error: {co_data['error'].get('message')}")
@@ -145,7 +161,8 @@ class YouTubeClient:
             "views_organic": 0,                 # Historical delta
             "views_ads": 0,
             "interactions": 0,
-            "accounts_reached": 0
+            "accounts_reached": 0,
+            "watch_time_hours": Decimal("0.0")
         }
 
         try:
@@ -166,6 +183,10 @@ class YouTubeClient:
                 result["followers_new"] = safe_int(row[1])
                 result["interactions"] = safe_int(row[2]) + safe_int(row[3]) + safe_int(row[4])
                 result["accounts_reached"] = total_views_period
+                
+                # watch_time_hours = estimatedMinutesWatched / 60
+                est_minutes = float(row[5]) if len(row) > 5 and row[5] is not None else 0
+                result["watch_time_hours"] = Decimal(str(round(est_minutes / 60, 2)))
 
                 # Second Query: Traffic Sources to isolate ADVERTISING views
                 # We reuse the same dates and channel context
