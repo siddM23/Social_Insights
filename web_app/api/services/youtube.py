@@ -165,6 +165,7 @@ class YouTubeClient:
             "watch_time_hours": Decimal("0.0")
         }
 
+        res = None
         try:
             # First Query: Totals for everything (Likes, subs, etc.)
             res = requests.get(self.analytics_url, params=analytics_params, headers=headers, timeout=15)
@@ -189,17 +190,19 @@ class YouTubeClient:
                 result["watch_time_hours"] = Decimal(str(round(est_minutes / 60, 2)))
 
                 # Second Query: Traffic Sources to isolate ADVERTISING views
-                # We reuse the same dates and channel context
                 source_params = analytics_params.copy()
                 source_params["dimensions"] = "insightTrafficSourceType"
                 source_params["metrics"] = "views"
                 
                 source_res = requests.get(self.analytics_url, params=source_params, headers=headers, timeout=15)
-                source_data = source_res.json()
+                if source_res.status_code != 200:
+                    logger.error(f"YouTube Traffic Source API error ({source_res.status_code}): {source_res.text}")
+                    source_data = {}
+                else:
+                    source_data = source_res.json()
                 
                 ad_views = 0
                 if "rows" in source_data:
-                    # Look for the 'ADVERTISING' row
                     for s_row in source_data["rows"]:
                         if s_row[0] == "ADVERTISING":
                             ad_views = safe_int(s_row[1])
@@ -210,10 +213,16 @@ class YouTubeClient:
                 
                 logger.info(f"Traffic Source split for {channel_id}: Organic={result['views_organic']}, Ads={result['views_ads']}")
             else:
-                logger.warning(f"No analytics rows returned for {channel_id} in window {start_date} to {end_date}")
+                if res is not None and res.status_code != 200:
+                    logger.error(f"YouTube Analytics API error ({res.status_code}): {res.text}")
+                else:
+                    logger.warning(f"No analytics rows returned for {channel_id} in window {start_date} to {end_date}. Full response: {data}")
         except Exception as e:
-            logger.error(f"Error fetching YouTube analytics: {e}")
-            if "data" in locals():
-                logger.error(f"YouTube API raw data was: {data}")
+            logger.error(f"Error fetching YouTube analytics for {channel_id}: {e}")
+            if res is not None:
+                logger.error(f"YouTube API response status: {res.status_code}")
+                logger.error(f"YouTube API response text: {res.text[:500]}")
+
+
 
         return result

@@ -205,10 +205,13 @@ class SyncService:
         logger.info(f"Syncing YouTube account: {account_id} (CO: {content_owner_id})")
         def fetch_data(token, co_id):
             client = YouTubeClient(token)
-            now = datetime.datetime.now()
-            days = [0, 7, 14, 30, 60]
+            now = datetime.datetime.utcnow()
+            # YouTube analytics have a 2-3 day lag. Shift windows back to ensure data availability.
+            # We use a 3-day lag (end=3 days ago).
+            days = [3, 10, 17, 33, 63]
             dates = {d: (now - datetime.timedelta(days=d)).strftime("%Y-%m-%d") for d in days}
-            wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
+            wins = [('7d', 10, 3), ('7_14', 17, 10), ('30d', 33, 3), ('30_60', 63, 33)]
+
             try:
                 res = {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e], content_owner_id=co_id) for n, s, e in wins}
                 logger.debug(f"Fetched raw YouTube data for {account_id}")
