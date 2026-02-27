@@ -63,7 +63,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, user_id: str = Depends
     }
     await users_repo.update_sync_status(user_id, new_status)
     logger.info(f"Starting background sync task for {user_id}")
-    background_tasks.add_task(sync_service.run_full_sync)
+    background_tasks.add_task(sync_service.run_full_sync, user_id)
     
     return {
         "message": "Sync started in background",

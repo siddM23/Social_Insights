@@ -238,13 +238,18 @@ class SyncService:
         await self.metrics_repo.upsert_daily_metrics('youtube', account_id, datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
 
-    async def run_full_sync(self):
-        logger.info("Starting full background sync...")
+    async def run_full_sync(self, user_id: str = None):
+        if user_id:
+            logger.info(f"Starting targeted sync for user: {user_id}")
+            integrations = await self.users_repo.list_integrations(user_id)
+        else:
+            logger.info("Starting full background sync...")
+            integrations = await self.users_repo.scan_all_integrations()
+
         success_count = 0
         fail_count = 0
         
         try:
-            integrations = await self.users_repo.scan_all_integrations()
             total = len(integrations)
             logger.info(f"Found {total} integrations to synchronize.")
             
