@@ -211,15 +211,19 @@ class SyncService:
             wins = [('7d', 7, 0), ('7_14', 14, 7), ('30d', 30, 0), ('30_60', 60, 30)]
             try:
                 res = {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e], content_owner_id=co_id) for n, s, e in wins}
-                logger.debug(f"Fetched YouTube data for {account_id}")
+                logger.debug(f"Fetched raw YouTube data for {account_id}")
                 return res
             except Exception as e:
-                logger.error(f"Error fetching YouTube data in thread: {e}")
+                logger.error(f"Error fetching YouTube data in client thread for {account_id}: {e}")
                 return None
 
         metrics = await asyncio.to_thread(fetch_data, access_token, content_owner_id)
-        if not metrics or not metrics.get('period_30d'):
-            logger.warning(f"No metrics data found for YouTube account {account_id}")
+        if not metrics:
+            logger.error(f"YouTube sync failed for {account_id}: fetch_data returned None")
+            return None
+            
+        if not metrics.get('period_30d'):
+            logger.warning(f"No 30-day metrics data found for YouTube account {account_id}")
             return None
 
         m30 = metrics['period_30d']
@@ -230,7 +234,7 @@ class SyncService:
             "raw_metrics": metrics
         }
         
-        logger.info(f"Upserting YouTube metrics for {account_id}")
+        logger.info(f"Successfully Prepared payload for YouTube/ {account_id}. Upserting to repo...")
         await self.metrics_repo.upsert_daily_metrics('youtube', account_id, datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
 
