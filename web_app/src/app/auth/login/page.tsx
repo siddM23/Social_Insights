@@ -14,7 +14,11 @@ export default function LoginPage() {
                         <Image src="/cube_logo.png" alt="Cube Logo" width={96} height={96} className="object-contain" />
                     </div>
                     <h1 className="text-3xl font-bold text-slate-900">Social Insights</h1>
-                    <p className="text-slate-500 mt-2">Unified Performance Dashboard</p>
+                    <p className="text-slate-500 mt-3 max-w-sm mx-auto">
+                        A unified reporting tool that aggregates performance metrics across your social media platforms
+                        into a single, intuitive dashboard.
+                    </p>
+
                 </div>
 
                 {/* Form Card */}
