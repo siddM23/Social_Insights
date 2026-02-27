@@ -13,6 +13,7 @@ sync_service = None
 
 @router.get("/sync/status")
 async def get_sync_status(user_id: str = Depends(get_current_user)):
+    logger.info(f"Fetching sync status for user {user_id}")
     status = await users_repo.get_sync_status(user_id)
     if not status:
         return {
@@ -30,6 +31,7 @@ async def get_sync_status(user_id: str = Depends(get_current_user)):
 
 @router.post("/sync")
 async def trigger_sync(background_tasks: BackgroundTasks, user_id: str = Depends(get_current_user)):
+    logger.info(f"Manual sync requested by user {user_id}")
     now = datetime.datetime.utcnow()
     await users_repo.log_activity(user_id, "trigger_sync")
     
@@ -44,6 +46,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, user_id: str = Depends
         last_sync = datetime.datetime.fromisoformat(last_sync_str)
         if (now - last_sync).total_seconds() < (3 * 3600):
             wait_remaining = int((3 * 3600) - (now - last_sync).total_seconds())
+            logger.warning(f"Sync rate limited for {user_id}. Remaining: {wait_remaining // 60}m")
             raise HTTPException(
                 status_code=429, 
                 detail=f"Sync limit reached. Please wait {wait_remaining // 60} minutes."
@@ -59,6 +62,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, user_id: str = Depends
         'last_sync_time': now.isoformat()
     }
     await users_repo.update_sync_status(user_id, new_status)
+    logger.info(f"Starting background sync task for {user_id}")
     background_tasks.add_task(sync_service.run_full_sync)
     
     return {

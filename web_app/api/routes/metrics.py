@@ -88,9 +88,11 @@ async def add_metric(req: MetricRequest):
 
 @router.get("/metrics/{platform}/{account_id}")
 async def get_metrics_for_platform_account(platform: str, account_id: str):
+    logger.info(f"Fetching metrics for platform: {platform}, account_id: {account_id}")
     end_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     start_date = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).strftime("%Y-%m-%d")
     items = await metrics_repo.get_metrics_range(platform, account_id, start_date, end_date)
+    logger.info(f"Found {len(items)} metric items for {platform}/{account_id}")
     return items
 
 @router.get("/metrics/{account_id}")

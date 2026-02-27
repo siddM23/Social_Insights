@@ -13,7 +13,9 @@ sync_service = None
 
 @router.post("/integrations")
 async def add_integration(req: IntegrationRequest, user_id: str = Depends(get_current_user)):
+    logger.info(f"Adding integration for user {user_id}: {req.platform}/{req.account_id}")
     if not req.access_token or not req.access_token.strip():
+        logger.error(f"Failed to add integration for {user_id}: Missing access token")
         raise HTTPException(status_code=400, detail="Access token is required and cannot be empty")
         
     await users_repo.add_integration(
@@ -27,6 +29,7 @@ async def add_integration(req: IntegrationRequest, user_id: str = Depends(get_cu
     )
     
     if req.platform == "instagram":
+        logger.info(f"Triggering initial sync for instagram/ {req.account_id}")
         await sync_service.sync_instagram_account(req.account_id, req.access_token)
     
     await users_repo.log_activity(user_id, "add_integration", {"platform": req.platform, "account_id": req.account_id})
@@ -34,10 +37,12 @@ async def add_integration(req: IntegrationRequest, user_id: str = Depends(get_cu
 
 @router.get("/integrations/{platform}/{account_id}")
 async def get_integration(platform: str, account_id: str, user_id: str = Depends(get_current_user)):
+    logger.info(f"Fetching integration details for user {user_id}: {platform}/{account_id}")
     sk = f"INTEGRATION#{platform}#{account_id}"
     item = await users_repo.get(f"USER#{user_id}", sk)
     
     if not item:
+        logger.warning(f"Integration not found for {user_id}: {platform}/{account_id}")
         raise HTTPException(status_code=404, detail="Integration not found")
     
     clean_item = {k: v for k, v in item.items() if k not in ["encrypted_access_token", "encrypted_refresh_token"]}
@@ -54,6 +59,7 @@ async def list_integrations(user_id: str = Depends(get_current_user)):
 
 @router.delete("/integrations/{platform}/{account_id}")
 async def delete_integration(platform: str, account_id: str, user_id: str = Depends(get_current_user)):
+    logger.info(f"Deleting integration for user {user_id}: {platform}/{account_id}")
     sk = f"INTEGRATION#{platform}#{account_id}"
     await users_repo.delete(f"USER#{user_id}", sk)
     await users_repo.log_activity(user_id, "delete_integration", {"platform": platform, "account_id": account_id})
