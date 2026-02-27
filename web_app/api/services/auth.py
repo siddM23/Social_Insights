@@ -283,3 +283,26 @@ class YouTubeAuth:
             
         yt_logger.info("Successfully exchanged YouTube code for tokens")
         return token_data
+
+    async def refresh_token(self, refresh_token: str):
+        """Exchange a refresh token for a new access token for YouTube/Google"""
+        yt_logger.info("Attempting to refresh YouTube access token")
+        data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token"
+        }
+
+        try:
+            res = requests.post(self.token_url, data=data, timeout=10)
+            token_data = res.json()
+            if res.status_code != 200:
+                yt_logger.error(f"YouTube token refresh failed. Response: {token_data}")
+                return None
+            
+            yt_logger.info("Successfully refreshed YouTube access token")
+            return token_data
+        except Exception as e:
+            yt_logger.error(f"Network error refreshing YouTube token: {e}")
+            return None

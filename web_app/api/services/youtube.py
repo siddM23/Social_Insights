@@ -213,10 +213,15 @@ class YouTubeClient:
                 
                 logger.info(f"Traffic Source split for {channel_id}: Organic={result['views_organic']}, Ads={result['views_ads']}")
             else:
+                if res is not None and res.status_code == 401:
+                    raise PermissionError("YouTube Access Token Expired or Invalid (401)")
+                
                 if res is not None and res.status_code != 200:
                     logger.error(f"YouTube Analytics API error ({res.status_code}): {res.text}")
                 else:
                     logger.warning(f"No analytics rows returned for {channel_id} in window {start_date} to {end_date}. Full response: {data}")
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"Error fetching YouTube analytics for {channel_id}: {e}")
             if res is not None:

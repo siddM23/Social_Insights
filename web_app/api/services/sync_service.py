@@ -103,6 +103,44 @@ class SyncService:
         )
         return new_access_token
 
+    async def _refresh_youtube_token(self, account: Dict[str, Any]) -> Optional[str]:
+        """Refresh YouTube/Google token and update repository"""
+        from services.auth import YouTubeAuth
+        refresh_token = account.get('encrypted_refresh_token')
+        if not refresh_token:
+            logger.warning(f"No refresh token for YouTube account {account.get('account_id')}")
+            return None
+
+        auth = YouTubeAuth()
+        try:
+            new_tokens = await auth.refresh_token(refresh_token)
+            if not new_tokens or 'access_token' not in new_tokens:
+                raise Exception("Invalid refresh response")
+        except Exception as e:
+            logger.error(f"TERMINAL FAILURE: Refresh failed for YouTube {account.get('account_id')}: {e}")
+            # Mark as broken to stop future RCU burn
+            await self.users_repo.update_integration_status(
+                user_id=account.get('PK').replace('USER#', ''),
+                platform='youtube',
+                account_id=account.get('account_id'),
+                status='DISCONNECTED',
+                error_message="Google refresh token expired or revoked. Please reconnect."
+            )
+            return None
+
+        new_access_token = new_tokens['access_token']
+        # Update repository
+        await self.users_repo.add_integration(
+            user_id=account.get('PK').replace('USER#', ''),
+            platform='youtube',
+            account_id=account.get('account_id'),
+            encrypted_access_token=new_access_token,
+            encrypted_refresh_token=new_tokens.get('refresh_token') or refresh_token,
+            account_name=account.get('account_name'),
+            additional_info=account.get('additional_info', {})
+        )
+        return new_access_token
+
     async def sync_pinterest_account(self, account_id: str, access_token: str, account_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         if account_data and account_data.get('status') == 'DISCONNECTED':
             logger.info(f"Skipping sync for disconnected Pinterest account: {account_id}")
@@ -200,9 +238,10 @@ class SyncService:
         await self.metrics_repo.upsert_daily_metrics('facebook', account_id.lower(), datetime.datetime.utcnow().strftime("%Y-%m-%d"), payload)
         return payload
 
-    async def sync_youtube_account(self, account_id: str, access_token: str, content_owner_id: str = None) -> Optional[Dict[str, Any]]:
+    async def sync_youtube_account(self, account_id: str, access_token: str, content_owner_id: str = None, account_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         from services.youtube import YouTubeClient
         logger.info(f"Syncing YouTube account: {account_id} (CO: {content_owner_id})")
+        
         def fetch_data(token, co_id):
             client = YouTubeClient(token)
             now = datetime.datetime.utcnow()
@@ -216,16 +255,25 @@ class SyncService:
                 res = {f"period_{n}": client.get_channel_insights(account_id, start_date=dates[s], end_date=dates[e], content_owner_id=co_id) for n, s, e in wins}
                 logger.debug(f"Fetched raw YouTube data for {account_id}")
                 return res
+            except PermissionError:
+                return "REFRESH_NEEDED"
             except Exception as e:
                 logger.error(f"Error fetching YouTube data in client thread for {account_id}: {e}")
                 return None
 
         metrics = await asyncio.to_thread(fetch_data, access_token, content_owner_id)
-        if not metrics:
-            logger.error(f"YouTube sync failed for {account_id}: fetch_data returned None")
+        
+        if metrics == "REFRESH_NEEDED" and account_data:
+            logger.info(f"YouTube token expired for {account_id}, attempting refresh...")
+            new_token = await self._refresh_youtube_token(account_data)
+            if new_token:
+                metrics = await asyncio.to_thread(fetch_data, new_token, content_owner_id)
+        
+        if not metrics or metrics == "REFRESH_NEEDED":
+            logger.error(f"YouTube sync failed for {account_id}: fetch_data returned {metrics}")
             return None
             
-        if not metrics.get('period_30d'):
+        if not isinstance(metrics, dict) or not metrics.get('period_30d'):
             logger.warning(f"No 30-day metrics data found for YouTube account {account_id}")
             return None
 
@@ -276,7 +324,7 @@ class SyncService:
                         res = await self.sync_pinterest_account(acc_id, token, account_data=account)
                     elif platform == 'youtube':
                         co_id = account.get('additional_info', {}).get('content_owner_id')
-                        res = await self.sync_youtube_account(acc_id, token, content_owner_id=co_id)
+                        res = await self.sync_youtube_account(acc_id, token, content_owner_id=co_id, account_data=account)
                     
                     if res:
                         success_count += 1
